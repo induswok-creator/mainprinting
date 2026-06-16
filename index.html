@@ -672,6 +672,26 @@
               <div class="grow field"><label>KOT font size (px)</label><input id="setKotFont" type="number" value="13"></div></div>
               <div class="row"><label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="setKotAutoPrint" style="width:auto"> Auto-send KOT to printer (skip preview)</label></div>
             </div>
+            <div class="card" style="box-shadow:none;border:1px solid var(--gold);background:#fffdf6;padding:12px;margin-top:10px">
+              <h3 style="margin-bottom:6px">📲 RawBT Thermal Printing (Android)</h3>
+              <p class="muted" style="font-size:11px;margin:0 0 8px;line-height:1.5">Install the free <b>RawBT</b> app from Google Play on the Android device, pair your 58mm/80mm Bluetooth or USB thermal printer in RawBT once. Then turn these on to print silently — no Chrome print dialog. The UPI <b>QR code prints as real text</b> (no image needed).</p>
+              <div class="row">
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="setRawbtBill" style="width:auto"> Use RawBT for Bills</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="setRawbtKot" style="width:auto"> Use RawBT for KOT</label>
+              </div>
+              <div class="row" style="margin-top:8px">
+                <div class="grow field" style="margin:0"><label>Characters per line (58mm=32, 80mm=48)</label><input id="setRawbtChars" type="number" value="32"></div>
+              </div>
+              <div class="row" style="margin-top:8px">
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="setRawbtQR" style="width:auto"> Print UPI "Scan & Pay" QR on bill</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="setRawbtCut" style="width:auto"> Auto paper-cut after print</label>
+              </div>
+              <div class="row" style="margin-top:10px">
+                <button class="btn-ghost grow" onclick="testRawbtBill()">📲 Test Bill (RawBT)</button>
+                <button class="btn-ghost grow" onclick="testRawbtKOT()">📲 Test KOT (RawBT)</button>
+              </div>
+              <p class="muted" style="font-size:11px;margin:8px 0 0">QR needs UPI ID filled in Restaurant Info. RawBT buttons open the RawBT app — allow it the first time.</p>
+            </div>
             <div class="row" style="margin-top:8px">
               <button class="btn-ghost grow" onclick="testPrint()">🧾 Test Bill</button>
               <button class="btn-ghost grow" onclick="testKOTPrint()">🍳 Test KOT</button>
@@ -745,12 +765,17 @@ function ensurePrintSettings(s){
   if(s.kotRoll===undefined)s.kotRoll=s.roll||72;
   if(s.kotFont===undefined)s.kotFont=Math.max(12,(s.font||12)+1);
   if(s.kotAutoPrint===undefined)s.kotAutoPrint=false;
+  if(s.rawbtBill===undefined)s.rawbtBill=false;
+  if(s.rawbtKot===undefined)s.rawbtKot=false;
+  if(s.rawbtChars===undefined)s.rawbtChars=32;
+  if(s.rawbtQR===undefined)s.rawbtQR=true;
+  if(s.rawbtCut===undefined)s.rawbtCut=true;
   s.roll=s.billRoll;s.font=s.billFont;s.autoPrint=s.billAutoPrint; // legacy compatibility
 }
 function printProfile(kind){
   const s=DB&&DB.settings?DB.settings:{};ensurePrintSettings(s);
-  if(kind==='kot')return {roll:+s.kotRoll||+s.roll||72,font:+s.kotFont||+s.font||12,autoPrint:!!s.kotAutoPrint};
-  return {roll:+s.billRoll||+s.roll||72,font:+s.billFont||+s.font||12,autoPrint:s.billAutoPrint!==undefined?!!s.billAutoPrint:!!s.autoPrint};
+  if(kind==='kot')return {roll:+s.kotRoll||+s.roll||72,font:+s.kotFont||+s.font||12,autoPrint:!!s.kotAutoPrint,rawbt:!!s.rawbtKot};
+  return {roll:+s.billRoll||+s.roll||72,font:+s.billFont||+s.font||12,autoPrint:s.billAutoPrint!==undefined?!!s.billAutoPrint:!!s.autoPrint,rawbt:!!s.rawbtBill};
 }
 
 /* ============================================================
@@ -1253,7 +1278,7 @@ a("Sides","","Masala Papad",50,0,"veg");
   const _recipesDummy=[
   ];
   return {
-    settings:{name:'Indus Wok',tagline:'Asian · Chinese · Pan-Asian Kitchen',phone:'',addr1:'',addr2:'',gst:'',upi:'',thanks:'Thank you! Visit again 🥢',gstEnabled:false,cgst:2.5,sgst:2.5,roll:72,font:12,autoPrint:true,billRoll:72,billFont:12,billAutoPrint:true,kotRoll:72,kotFont:13,kotAutoPrint:false,syncUrl:'',licenseUrl:'',aiProv:'gemini',aiKey:''},
+    settings:{name:'Indus Wok',tagline:'Asian · Chinese · Pan-Asian Kitchen',phone:'',addr1:'',addr2:'',gst:'',upi:'',thanks:'Thank you! Visit again 🥢',gstEnabled:false,cgst:2.5,sgst:2.5,roll:72,font:12,autoPrint:true,billRoll:72,billFont:12,billAutoPrint:true,kotRoll:72,kotFont:13,kotAutoPrint:false,rawbtBill:false,rawbtKot:false,rawbtChars:32,rawbtQR:true,rawbtCut:true,syncUrl:'',licenseUrl:'',aiProv:'gemini',aiKey:''},
     users:[{name:'Owner',pin:'1111',role:'Owner'},{name:'Cashier',pin:'2222',role:'Cashier'},{name:'Waiter',pin:'3333',role:'Waiter'}],
     menuVersion:MENU_VERSION,
     menu,tables,bills:[],expenses:[],inventory,vendors,recipes,vendorTxns:[],deductions:[],staff:[],attendance:[],sessions:[],payments:[],customers:[],kots:[],
@@ -1594,8 +1619,8 @@ function printStationKOT(key) {
   _lastLocalEdit=Date.now();_lastLocalEditKey=key;
   save();
   const html=buildReceiptHTML(b, true);
-  if(printProfile('kot').autoPrint){window.__printHTML=html;window.__printKind='kot';sendToPrinter('kot');}
-  else doPrint(html, '🍳 KOT (Kitchen)', 'kot');
+  if(printProfile('kot').autoPrint){window.__printHTML=html;window.__printKind='kot';window.__printBill=b;sendToPrinter('kot');}
+  else doPrint(html, '🍳 KOT (Kitchen)', 'kot', b);
 }
 
 function printStationBill(key) {
@@ -2037,12 +2062,145 @@ function buildReceiptHTML(bill,isKOT){
     <br><br>
   </div>`;
 }
-function doPrint(html,title,kind){
+/* ============================================================
+   RAWBT THERMAL PRINTING (Android)  +  ESC/POS QR CODE via text
+   ------------------------------------------------------------
+   RawBT (Play Store app "RawBT print service") prints to most cheap
+   Bluetooth / USB 58mm & 80mm thermal printers WITHOUT a print dialog.
+   We hand it raw ESC/POS text via the  intent:  URL scheme. A real
+   scannable QR code is embedded using the GS ( k command set — no image,
+   pure text/bytes — so the UPI "Scan & Pay" QR prints on the receipt.
+   ============================================================ */
+const ESC='\x1B', GS='\x1D', LF='\n';
+// width in characters: 58mm≈32, 80mm≈48 (driven by Settings → "chars/line")
+function rbChars(){const c=+(DB.settings&&DB.settings.rawbtChars)||32;return c>=24?c:32;}
+function rbLine(ch){return (ch||'-').repeat(rbChars());}
+function rbCenter(t){const w=rbChars();t=String(t);if(t.length>=w)return t.slice(0,w);const pad=Math.floor((w-t.length)/2);return ' '.repeat(pad)+t;}
+// left text + right text on one line (e.g. item ........ amount)
+function rbLR(l,r){const w=rbChars();l=String(l);r=String(r);let space=w-l.length-r.length;if(space<1){l=l.slice(0,Math.max(0,w-r.length-1));space=Math.max(1,w-l.length-r.length);}return l+' '.repeat(space)+r;}
+// money without the ₹ symbol (thermal printers usually can't render ₹)
+function rbMoney(n){return 'Rs.'+(Math.round((+n||0)*100)/100).toLocaleString('en-IN');}
+// wrap a long line to width
+function rbWrap(t){const w=rbChars();t=String(t);const out=[];while(t.length>w){out.push(t.slice(0,w));t=t.slice(w);}out.push(t);return out.join(LF);}
+
+// Build an ESC/POS QR code block (model 2). data = string to encode.
+function escposQR(data,size){
+  if(!data)return '';
+  size=size||6; // module size 1-16
+  const store=function(d){
+    const len=d.length+3;
+    const pL=String.fromCharCode(len & 0xff), pH=String.fromCharCode((len>>8)&0xff);
+    return GS+'(k'+pL+pH+'\x31\x50\x30'+d;
+  };
+  let s='';
+  s+=GS+'(k\x04\x00\x31\x41\x32\x00';                  // model 2
+  s+=GS+'(k\x03\x00\x31\x43'+String.fromCharCode(size); // module size
+  s+=GS+'(k\x03\x00\x31\x45\x31';                       // error correction L
+  s+=store(data);                                       // store the data
+  s+=GS+'(k\x03\x00\x31\x51\x30';                       // print the symbol
+  return s;
+}
+
+// Convert a bill object into ESC/POS plain-text (with formatting + QR).
+function buildRawbtText(bill,isKOT){
+  const s=DB.settings;const qrOn=!!s.rawbtQR;const cutOn=!!s.rawbtCut;
+  const BOLD_ON=ESC+'E\x01', BOLD_OFF=ESC+'E\x00';
+  const DH_ON=GS+'!\x11', DH_OFF=GS+'!\x00';   // double width+height
+  const AL_C=ESC+'a\x01', AL_L=ESC+'a\x00', AL_R=ESC+'a\x02';
+  let o=ESC+'@';                               // init printer
+  o+=AL_C;
+  if(isKOT){
+    o+=DH_ON+BOLD_ON+'*** KOT ***'+BOLD_OFF+DH_OFF+LF;
+    o+=(bill.type||'')+(bill.table?' - '+bill.table:'')+LF;
+    o+=bill.date+'  '+bill.time+LF;
+    o+=AL_L+rbLine('-')+LF;
+    bill.items.forEach(i=>{
+      normalizeCartItem(i);
+      const size=i.size==='half'?' (Half)':'';
+      const cut=i.cancelled?'[X] ':'';
+      o+=BOLD_ON+rbLR(cut+i.name+size, 'x'+i.qty)+BOLD_OFF+LF;
+      const sub=itemSub(i); if(sub)o+=rbWrap('  Sub: '+sub)+LF;
+      const inst=itemInstructionText(i); if(inst)o+=rbWrap('  Note: '+inst)+LF;
+    });
+    o+=rbLine('-')+LF;
+    if(bill.cust)o+=AL_C+bill.cust+LF;
+    o+=AL_C+'Sent by '+(bill.by||'')+LF+LF;
+    if(cutOn){o+=GS+'V\x42\x00';}else{o+=LF+LF+LF;}
+    return o;
+  }
+  // ---- customer bill ----
+  o+=DH_ON+BOLD_ON+(s.name||'Indus Wok')+BOLD_OFF+DH_OFF+LF;
+  if(s.tagline)o+=s.tagline+LF;
+  if(s.addr1)o+=s.addr1+LF;
+  if(s.addr2)o+=s.addr2+LF;
+  if(s.phone)o+='Ph: '+s.phone+LF;
+  if(s.gst)o+='GSTIN: '+s.gst+LF;
+  o+=AL_L+rbLine('-')+LF;
+  o+='Bill: '+bill.no+LF;
+  o+=bill.date+' '+bill.time+' - '+(bill.type||'')+(bill.table?' - '+bill.table:'')+LF;
+  if(bill.cust)o+='Cust: '+bill.cust+LF;
+  if(bill.phone)o+='Ph: '+bill.phone+LF;
+  if(bill.addr)o+=rbWrap('Addr: '+bill.addr)+LF;
+  o+=rbLine('-')+LF;
+  o+=rbLR('Item','Qty  Amt')+LF;
+  o+=rbLine('-')+LF;
+  bill.items.forEach(i=>{
+    normalizeCartItem(i);
+    const size=i.size==='half'?' (H)':'';
+    o+=rbWrap(i.name+size)+LF;
+    o+=rbLR('  '+rbMoney(i.price)+' x'+i.qty, rbMoney((i.price||0)*i.qty))+LF;
+  });
+  o+=rbLine('-')+LF;
+  const t=bill.totals;
+  o+=rbLR('Subtotal', rbMoney(t.sub))+LF;
+  if(t.disc)o+=rbLR('Discount','- '+rbMoney(t.disc))+LF;
+  if(t.gstOn){o+=rbLR('CGST '+s.cgst+'%', rbMoney(t.cgst))+LF;o+=rbLR('SGST '+s.sgst+'%', rbMoney(t.sgst))+LF;}
+  o+=rbLine('=')+LF;
+  o+=BOLD_ON+DH_ON+rbLR('TOTAL', rbMoney(t.total))+DH_OFF+BOLD_OFF+LF;
+  o+=rbLR('Mode', String(bill.mode||''))+LF;
+  o+=rbLine('-')+LF;
+  // QR code for UPI Scan & Pay (or any UPI id) — printed as real ESC/POS QR
+  if(qrOn && s.upi){
+    const amt=(Math.round((t.total||0)*100)/100);
+    const upiUri='upi://pay?pa='+encodeURIComponent(s.upi)+'&pn='+encodeURIComponent(s.name||'Indus Wok')+(amt?('&am='+amt):'')+'&cu=INR&tn='+encodeURIComponent('Bill '+bill.no);
+    o+=AL_C+BOLD_ON+'Scan & Pay (UPI)'+BOLD_OFF+LF;
+    o+=escposQR(upiUri,6)+LF;
+    o+=s.upi+LF;
+  }
+  o+=AL_C+(s.thanks||'Thank you!')+LF;
+  o+='Billed by '+(bill.by||'')+LF;
+  if(cutOn){o+=LF+GS+'V\x42\x00';}else{o+=LF+LF+LF;}
+  return o;
+}
+
+// Send raw ESC/POS text to the RawBT app via the intent: URL scheme.
+function sendToRawBT(text){
+  try{
+    const S='#Intent;scheme=rawbt;';
+    const P='package=ru.a402d.rawbtprinter;end;';
+    const encoded=encodeURIComponent(text).replace(/'/g,'%27').replace(/\(/g,'%28').replace(/\)/g,'%29');
+    window.location.href='intent:'+encoded+S+P;
+    return true;
+  }catch(e){toast('⚠️ RawBT not available. Install the "RawBT" app on this Android device.');return false;}
+}
+
+// Route a bill to RawBT (used by auto-print + buttons).
+function rawbtPrint(bill,kind){
+  const text=buildRawbtText(bill,kind==='kot');
+  return sendToRawBT(text);
+}
+
+function doPrint(html,title,kind,bill){
   // Show an on-screen preview modal with a Print button.
   // This works in the sandboxed preview (you can SEE the receipt) AND in real Chrome
   // (the Print button opens a clean 80mm print window).
   kind=kind||(title&&String(title).includes('KOT')?'kot':'bill');
   const w=printProfile(kind).roll;
+  window.__printHTML=html;
+  window.__printKind=kind;
+  window.__printBill=bill||null;
+  // Optional RawBT button (only useful on Android with the RawBT app)
+  const rawbtBtn=`<button class="btn-ghost grow" onclick="sendToPrinter('${kind}',true)" title="Print via RawBT thermal app">📲 RawBT</button>`;
   const box=`<div class="box" style="max-width:${Math.max(w*3.9,300)}px">
     <div class="row" style="align-items:center;margin-bottom:8px"><h2 style="margin:0">${title||'🧾 Receipt Preview'}</h2><div class="grow"></div>
       <button class="btn-ghost" onclick="closeModal()">✖ Close</button></div>
@@ -2051,18 +2209,22 @@ function doPrint(html,title,kind){
     </div>
     <div class="row" style="margin-top:12px">
       <button class="btn-ghost grow" onclick="closeModal()">Cancel</button>
+      ${bill?rawbtBtn:''}
       <button class="btn-primary grow" onclick="sendToPrinter()">🖨️ Print Now</button>
     </div>
-    <div class="muted" style="font-size:11px;margin-top:8px;text-align:center">In Chrome's print box: Margins → None · Scale → 100% · uncheck Headers/footers</div>
+    <div class="muted" style="font-size:11px;margin-top:8px;text-align:center">Chrome: Margins → None · Scale → 100% · uncheck Headers/footers · or tap 📲 RawBT on Android.</div>
   </div>`;
   openModal(box);
-  window.__printHTML=html;
-  window.__printKind=kind;
 }
-function sendToPrinter(kind){
+function sendToPrinter(kind,forceRawbt){
   const html=window.__printHTML||'';
   kind=kind||window.__printKind||'bill';
   const prof=printProfile(kind);
+  // RawBT path: send raw ESC/POS text (with QR) to the RawBT Android app.
+  if((forceRawbt||prof.rawbt) && window.__printBill){
+    const ok=rawbtPrint(window.__printBill,kind);
+    if(ok){closeModal&&closeModal();return;}
+  }
   const w=prof.roll,f=prof.font;
   const css=`
     @page{ size:${w}mm auto; margin:0; }
@@ -2107,8 +2269,8 @@ function printKOT(){
   save();
   renderCart();markOccupied();
   const html=buildReceiptHTML(b,true);
-  if(printProfile('kot').autoPrint){window.__printHTML=html;window.__printKind='kot';sendToPrinter('kot');}
-  else doPrint(html,'🍳 KOT (Kitchen)','kot');
+  if(printProfile('kot').autoPrint){window.__printHTML=html;window.__printKind='kot';window.__printBill=b;sendToPrinter('kot');}
+  else doPrint(html,'🍳 KOT (Kitchen)','kot',b);
 }
 
 function makeBillObj(no){
@@ -2120,7 +2282,7 @@ function makeBillObj(no){
 function printBill(settled){
   if(!cart.items.length){toast('Cart empty');return;}
   const b=makeBillObj();
-  doPrint(buildReceiptHTML(b,false),'🧾 Customer Bill','bill');
+  doPrint(buildReceiptHTML(b,false),'🧾 Customer Bill','bill',b);
 }
 function settleBill(){
   if(!cart.items.length){toast('Cart empty');return;}
@@ -2144,8 +2306,8 @@ function settleBill(){
   toast('✅ Bill '+b.no+' settled · '+money(b.total));
   go('tables');
   const html=buildReceiptHTML(b,false);
-  if(printProfile('bill').autoPrint){ window.__printHTML=html; window.__printKind='bill'; sendToPrinter('bill'); }
-  else { doPrint(html,'✅ Bill '+b.no+' — Settled','bill'); }
+  if(printProfile('bill').autoPrint){ window.__printHTML=html; window.__printKind='bill'; window.__printBill=b; sendToPrinter('bill'); }
+  else { doPrint(html,'✅ Bill '+b.no+' — Settled','bill',b); }
 }
 
 /* takeaway / delivery */
@@ -2629,12 +2791,13 @@ function fillSettings(){
   ensurePrintSettings(s);
   $('#setBillRoll').value=s.billRoll;$('#setBillFont').value=s.billFont;$('#setBillAutoPrint').checked=!!s.billAutoPrint;
   $('#setKotRoll').value=s.kotRoll;$('#setKotFont').value=s.kotFont;$('#setKotAutoPrint').checked=!!s.kotAutoPrint;
+  $('#setRawbtBill').checked=!!s.rawbtBill;$('#setRawbtKot').checked=!!s.rawbtKot;$('#setRawbtChars').value=s.rawbtChars||32;$('#setRawbtQR').checked=!!s.rawbtQR;$('#setRawbtCut').checked=!!s.rawbtCut;
   $('#setSyncUrl').value=s.syncUrl;$('#setAiProv').value=s.aiProv;$('#setAiKey').value=s.aiKey;
   renderUsers();renderLicenseStatus();
 }
 function toggleGstFields(){const on=$('#setGstEnabled').checked;$('#gstRates').style.opacity=on?'1':'.4';$('#setCgst').disabled=!on;$('#setSgst').disabled=!on;}
 function saveSettings(){const s=DB.settings;s.name=$('#setName').value;s.tagline=$('#setTag').value;s.phone=$('#setPhone').value;s.addr1=$('#setAddr1').value;s.addr2=$('#setAddr2').value;s.gst=$('#setGst').value;s.upi=$('#setUpi').value;s.thanks=$('#setThanks').value;s.gstEnabled=$('#setGstEnabled').checked;s.cgst=+$('#setCgst').value||0;s.sgst=+$('#setSgst').value||0;save();$('#topTagline').textContent=s.tagline;toast('Saved ✅');}
-function savePrinter(){const s=DB.settings;ensurePrintSettings(s);s.billRoll=+$('#setBillRoll').value||72;s.billFont=+$('#setBillFont').value||12;s.billAutoPrint=$('#setBillAutoPrint').checked;s.kotRoll=+$('#setKotRoll').value||72;s.kotFont=+$('#setKotFont').value||13;s.kotAutoPrint=$('#setKotAutoPrint').checked;s.roll=s.billRoll;s.font=s.billFont;s.autoPrint=s.billAutoPrint;save();toast('Printing settings saved');}
+function savePrinter(){const s=DB.settings;ensurePrintSettings(s);s.billRoll=+$('#setBillRoll').value||72;s.billFont=+$('#setBillFont').value||12;s.billAutoPrint=$('#setBillAutoPrint').checked;s.kotRoll=+$('#setKotRoll').value||72;s.kotFont=+$('#setKotFont').value||13;s.kotAutoPrint=$('#setKotAutoPrint').checked;s.rawbtBill=$('#setRawbtBill').checked;s.rawbtKot=$('#setRawbtKot').checked;s.rawbtChars=+$('#setRawbtChars').value||32;s.rawbtQR=$('#setRawbtQR').checked;s.rawbtCut=$('#setRawbtCut').checked;s.roll=s.billRoll;s.font=s.billFont;s.autoPrint=s.billAutoPrint;save();toast('Printing settings saved');}
 function saveSync(){DB.settings.syncUrl=$('#setSyncUrl').value.trim();persist();toast('Sync URL saved');startSync();}
 function saveAi(){DB.settings.aiProv=$('#setAiProv').value;DB.settings.aiKey=$('#setAiKey').value.trim();save();toast('AI key saved');}
 function renderUsers(){const tb=$('#usersTable tbody');tb.innerHTML='';DB.users.forEach((u,i)=>{tb.innerHTML+=`<tr><td>${u.name}</td><td>${u.role}</td><td>${u.pin}</td><td>${DB.users.length>1?`<button class="btn-ghost" onclick="delUser(${i})">🗑️</button>`:''}</td></tr>`;});}
@@ -2646,13 +2809,26 @@ function testPrint(){
   const b={no:'TEST01',date:todayStr(),time:nowTime(),type:'Dine-in',table:'Table 1',cust:'Test Customer',by:CUR?CUR.name:'Owner',mode:'Cash',
     items:[{name:'Chicken Manchow Soup',sub:'Non Veg',size:'full',price:150,qty:2,mods:['Less spicy'],note:'No oil'},{name:'Chilli Paneer',sub:'Veg Starter',size:'half',price:140,qty:1,mods:[],note:''}],
     totals:{sub:440,disc:0,cgst:11,sgst:11,total:462,gstOn:true},total:462};
-  doPrint(buildReceiptHTML(b,false),'🧾 Test Bill','bill');
+  doPrint(buildReceiptHTML(b,false),'🧾 Test Bill','bill',b);
 }
 function testKOTPrint(){
   const b={no:'KOT',date:todayStr(),time:nowTime(),type:'Dine-in',table:'Table 1',cust:'Test Customer',by:CUR?CUR.name:'Owner',mode:'Cash',
     items:[{name:'Chicken Manchow Soup',sub:'Non Veg Soup',size:'full',price:150,qty:2,mods:['Less spicy','No oil'],note:''},{name:'Chilli Paneer',sub:'Veg Starter',size:'half',price:140,qty:1,mods:['Extra sauce'],note:'Make dry'}],
     totals:{sub:440,disc:0,cgst:0,sgst:0,total:440,gstOn:false},total:440};
-  doPrint(buildReceiptHTML(b,true),'🍳 Test KOT','kot');
+  doPrint(buildReceiptHTML(b,true),'🍳 Test KOT','kot',b);
+}
+// Direct RawBT test prints (skip preview) — handy to verify the thermal printer + QR.
+function testRawbtBill(){
+  const b={no:'TEST01',date:todayStr(),time:nowTime(),type:'Dine-in',table:'Table 1',cust:'Test Customer',by:CUR?CUR.name:'Owner',mode:'UPI',
+    items:[{name:'Chicken Manchow Soup',sub:'Non Veg',size:'full',price:150,qty:2,mods:['Less spicy'],note:'No oil'},{name:'Chilli Paneer',sub:'Veg Starter',size:'half',price:140,qty:1,mods:[],note:''}],
+    totals:{sub:440,disc:0,cgst:11,sgst:11,total:462,gstOn:true},total:462};
+  rawbtPrint(b,'bill');
+}
+function testRawbtKOT(){
+  const b={no:'KOT',date:todayStr(),time:nowTime(),type:'Dine-in',table:'Table 1',cust:'Test Customer',by:CUR?CUR.name:'Owner',mode:'Cash',
+    items:[{name:'Chicken Manchow Soup',sub:'Non Veg Soup',size:'full',price:150,qty:2,mods:['Less spicy','No oil'],note:''},{name:'Chilli Paneer',sub:'Veg Starter',size:'half',price:140,qty:1,mods:['Extra sauce'],note:'Make dry'}],
+    totals:{sub:440,disc:0,cgst:0,sgst:0,total:440,gstOn:false},total:440};
+  rawbtPrint(b,'kot');
 }
 function printDayReport(sid){
   const s=DB.sessions.find(x=>x.id===sid);if(!s)return;
@@ -2997,5 +3173,5 @@ async function boot(){
 boot();
 </script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0985f9fd89bc06b',t:'MTc4MTA5NDQ4MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0985f9fd89bc06b',t:'MTc4MTA5NDQ4MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0ca32ae18d938b2',t:'MTc4MTYxNjkyOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
