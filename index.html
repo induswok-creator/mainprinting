@@ -258,18 +258,6 @@
   </div>
 </div>
 
-<!-- ================= LOCK SCREEN ================= -->
-<div id="lockScreen" style="display:none;position:fixed;inset:0;background:linear-gradient(160deg,#7e0c1a,#2a0406);align-items:center;justify-content:center;z-index:200;padding:16px">
-  <div class="login-card" style="width:380px">
-    <div class="logo">🔒</div>
-    <div class="brand">Access Locked</div>
-    <div class="brand-sub" id="lockReason" style="color:#c0392b">Your subscription has expired.</div>
-    <p class="muted" style="font-size:13px;line-height:1.5">Please contact your software provider to renew. Once payment is done you'll get an <b>unlock key</b>. Enter it below to continue.</p>
-    <input id="lockKeyInput" placeholder="IW-XXXXXXXX-XXXXXX" style="text-align:center;letter-spacing:1px;margin:6px 0 12px;text-transform:uppercase">
-    <button class="btn-primary" style="width:100%" onclick="applyKeyFromInput()">🔓 Unlock</button>
-    <div class="muted" style="font-size:11px;margin-top:12px">Your data is safe — it stays on this device.</div>
-  </div>
-</div>
 
 <!-- ================= APP ================= -->
 <div id="app">
@@ -278,7 +266,6 @@
     <div class="title">🥢 Indus Wok<small id="topTagline">Restaurant POS</small></div>
     <span class="daybadge" id="dayBadge"></span>
     <span id="syncBadge" style="display:none;font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px"></span>
-    <span id="licBanner" style="display:none;font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px;background:#fff3cd;color:#8a6d00"></span>
     <div class="who" id="whoBox"></div>
   </header>
 
@@ -722,11 +709,6 @@
         </div>
         <div class="scroll"><table id="usersTable"><thead><tr><th>User</th><th>Role</th><th>PIN</th><th></th></tr></thead><tbody></tbody></table></div>
       </div>
-      <div class="card" style="margin-top:14px"><h3>🔑 Subscription / License</h3>
-        <div id="licStatus" style="font-size:14px;margin-bottom:8px"></div>
-        <p class="muted" style="font-size:12px;margin-top:0">Enter the renewal key your provider gives you after payment.</p>
-        <div class="row"><input id="licKeyInput" placeholder="IW-XXXXXXXX-XXXXXX" style="text-transform:uppercase"><button class="btn-primary" onclick="applyKeyFromSettings()">🔓 Apply Key</button></div>
-      </div>
       <div class="card" style="margin-top:14px"><h3>💾 Backup & Restore</h3>
         <div class="row"><button class="btn-ghost" onclick="exportBackup()">⬇️ Export Backup (.json)</button>
         <label class="btn-ghost" style="display:inline-block">⬆️ Import Backup<input type="file" id="restoreInput" accept=".json" style="display:none"></label>
@@ -779,91 +761,19 @@ function printProfile(kind){
 }
 
 /* ============================================================
-   LICENSE / ACCESS CONTROL
-   - Offline monthly unlock key  +  optional remote kill-switch.
-   - SECRET must match the one in licence-key-generator.html (KEEP PRIVATE).
+   LICENSE / ACCESS CONTROL — DISABLED
+   The subscription / activation-key lock has been removed.
+   The functions below are harmless no-ops kept only so any leftover
+   call sites won't throw. The app is always unlocked.
    ============================================================ */
-const LICENSE_SECRET='IW-7K2M-2025'; // <-- change this to your own secret before selling
-// Your PRIVATE control-script URL (kill-switch). Paste it here before selling.
-// It lives in YOUR Google account only — the client can never edit it.
-// Leave '' to rely only on the monthly unlock key.
-const LICENSE_CONTROL_URL='';
-// Daily codes are derived from this secret; vendor cannot guess future keys.
-async function sha(str){
-  try{const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
-    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');}
-  catch(e){ // fallback simple hash if crypto unavailable
-    let h=0;for(let i=0;i<str.length;i++){h=(h*31+str.charCodeAt(i))>>>0;}return h.toString(16);}
-}
-// A valid key encodes an expiry date. Format the owner enters: SRC-<YYYYMMDD>-<CHK>
-async function makeKey(expiryYMD){
-  const chk=(await sha(LICENSE_SECRET+'|'+expiryYMD)).slice(0,6).toUpperCase();
-  return 'SRC-'+expiryYMD+'-'+chk;
-}
-async function validateKey(key){
-  if(!key)return null;
-  const m=String(key).trim().toUpperCase().match(/^SRC-(\d{8})-([0-9A-F]{6})$/);
-  if(!m)return null;
-  const ymd=m[1];
-  const expect=(await sha(LICENSE_SECRET+'|'+ymd)).slice(0,6).toUpperCase();
-  if(expect!==m[2])return null;
-  return ymd.slice(0,4)+'-'+ymd.slice(4,6)+'-'+ymd.slice(6,8); // ISO expiry
-}
-function daysLeft(){
-  if(!DB.license||!DB.license.expiry)return -999;
-  const exp=new Date(DB.license.expiry+'T00:00:00');
-  const now=new Date(todayStr()+'T00:00:00');
-  return Math.round((exp-now)/86400000); // whole calendar days, today=0
-}
-// Locked if blocked, or today's date is strictly AFTER the expiry date.
-function isLocked(){return !!(DB.license&&DB.license.blocked) || (DB.license&&DB.license.expiry && todayStr()>DB.license.expiry);}
-// remote kill-switch: reads OK/BLOCK from YOUR private control script (separate from data sheet)
-async function checkRemote(){
-  const url=LICENSE_CONTROL_URL||DB.settings.licenseUrl;if(!url)return;
-  try{const r=await fetch(url,{method:'GET'});const txt=(await r.text()).trim().toUpperCase();
-    if(txt.includes('BLOCK')){DB.license.blocked=true;save();}
-    else if(txt.includes('OK')||txt.includes('ALLOW')){if(DB.license.blocked){DB.license.blocked=false;save();}}
-  }catch(e){/* offline: ignore, rely on key expiry */}
-}
-async function showLockScreen(reason){
-  const dl=daysLeft();
-  const lock=document.getElementById('lockScreen');
-  document.getElementById('app').style.display='none';
-  document.getElementById('login').style.display='none';
-  lock.style.display='flex';
-  document.getElementById('lockReason').textContent=reason||(DB.license.blocked?'Access has been blocked by the provider.':'Your subscription has expired.');
-}
-async function applyKeyFromInput(){
-  const key=document.getElementById('lockKeyInput').value;
-  const iso=await validateKey(key);
-  if(!iso){toast('❌ Invalid key');return;}
-  DB.license.expiry=iso;DB.license.lastKey=key.trim();DB.license.blocked=false;DB.license.activated=true;
-  save();
-  document.getElementById('lockScreen').style.display='none';
-  toast('✅ Activated until '+iso);
-  renderLogin();document.getElementById('login').style.display='flex';
-}
-async function applyKeyFromSettings(){
-  const key=document.getElementById('licKeyInput').value;
-  const iso=await validateKey(key);
-  if(!iso){toast('❌ Invalid key');return;}
-  DB.license.expiry=iso;DB.license.lastKey=key.trim();DB.license.blocked=false;DB.license.activated=true;
-  save();document.getElementById('licKeyInput').value='';renderLicenseStatus();updateDayBadge&&renderHeaderLic();
-  toast('✅ Renewed until '+iso);
-}
-function renderLicenseStatus(){
-  const el=document.getElementById('licStatus');if(!el)return;
-  const dl=daysLeft();
-  let color=dl<=3?'var(--red)':(dl<=7?'var(--warn)':'var(--ok)');
-  let msg=DB.license.blocked?'🔒 Blocked by provider':(dl<0?'🔒 Expired on '+DB.license.expiry:`✅ Active until <b>${DB.license.expiry}</b> (${dl} day${dl===1?'':'s'} left)`);
-  el.innerHTML=`<span style="color:${color};font-weight:600">${msg}</span>`;
-}
-function renderHeaderLic(){
-  const w=document.getElementById('licBanner');if(!w)return;
-  const dl=daysLeft();
-  if(dl<=7&&dl>=0){w.style.display='inline-block';w.textContent='⏳ License: '+dl+'d left';}
-  else w.style.display='none';
-}
+function isLocked(){return false;}
+function daysLeft(){return 99999;}
+function showLockScreen(){/* no lock screen */}
+function checkRemote(){/* kill-switch disabled */}
+function applyKeyFromInput(){/* activation removed */}
+function applyKeyFromSettings(){/* activation removed */}
+function renderLicenseStatus(){/* license UI removed */}
+function renderHeaderLic(){/* license banner removed */}
 
 /* ---------- DB ---------- */
 let DB=load();
@@ -876,7 +786,6 @@ function load(){
     if(d.settings.gstEnabled===undefined)d.settings.gstEnabled=false;
     if(d.settings.licenseUrl===undefined)d.settings.licenseUrl='';
     ensurePrintSettings(d.settings);
-    if(!d.license)d.license={expiry:isoAddDays(14),lastKey:'',blocked:false,activated:false};
     // One-time menu upgrade: replace the old demo menu with the full Indus Wok menu.
     if(d.menuVersion!==MENU_VERSION){
       const fresh=seed();
@@ -1282,7 +1191,6 @@ a("Sides","","Masala Papad",50,0,"veg");
     users:[{name:'Owner',pin:'1111',role:'Owner'},{name:'Cashier',pin:'2222',role:'Cashier'},{name:'Waiter',pin:'3333',role:'Waiter'}],
     menuVersion:MENU_VERSION,
     menu,tables,bills:[],expenses:[],inventory,vendors,recipes,vendorTxns:[],deductions:[],staff:[],attendance:[],sessions:[],payments:[],customers:[],kots:[],
-    license:{expiry:isoAddDays(14),lastKey:'',blocked:false,activated:false},
     carts:{}
   };
 }
@@ -2865,8 +2773,7 @@ function printDayReport(sid){
    - Last-write-wins, with a guard so your OPEN cart isn't wiped.
    ============================================================ */
 const SYNC_KEYS=['bills','expenses','customers','users','vendors','vendorTxns','inventory','staff','payments','menu','sessions','tables','recipes','deductions','attendance','kots','settings'];
-// NOTE: 'license' is intentionally NOT synced — activation/lock is per-device.
-// Per-device settings (syncUrl/licenseUrl/aiKey) are preserved on pull (see applyRemote).
+// Per-device settings (syncUrl/aiKey) are preserved on pull (see applyRemote).
 let _rev=0;              // revision number from the server
 let _pushTimer=null;     // debounce timer
 let _pushing=false, _pulling=false, _pendingPush=false;
@@ -3158,9 +3065,7 @@ function wire(){
 
 /* ---------- START ---------- */
 async function boot(){
-  await checkRemote();           // optional remote kill-switch (ignored if offline)
   if(syncUrl()){ await pullNow({force:true}); }  // get latest shared data before anything
-  if(isLocked()){ showLockScreen(); return; }
   startSync();                   // begin live multi-device sync
   // Restore previous session so a page refresh keeps you logged in
   let sess=null; try{sess=JSON.parse(localStorage.getItem('iw_session'));}catch(e){}
@@ -3173,5 +3078,5 @@ async function boot(){
 boot();
 </script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0985f9fd89bc06b',t:'MTc4MTA5NDQ4MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0ca32ae18d938b2',t:'MTc4MTYxNjkyOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0985f9fd89bc06b',t:'MTc4MTA5NDQ4MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0ca3b47189a2da3',t:'MTc4MTYxNzI4MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
