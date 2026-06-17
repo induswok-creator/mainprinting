@@ -686,10 +686,14 @@
             </div>
           </div>
           <div class="card" style="margin-top:14px"><h3>☁️ Live Multi-Device Sync</h3>
-            <p class="muted" style="font-size:12px;margin-top:0">Paste your Apps Script <b>Web App URL</b> to share data across ALL devices (users, menu, bills, customers, etc.). Use the <b>same URL on every device</b>. Changes appear everywhere within ~12 seconds.</p>
+            <p class="muted" style="font-size:12px;margin-top:0">Paste your Apps Script <b>Web App URL</b> to share data across ALL devices (users, menu, bills, customers, etc.). Use the <b>same URL on every device</b>. Changes appear everywhere within ~2-3 seconds.</p>
             <div class="field"><input id="setSyncUrl" placeholder="https://script.google.com/macros/s/..../exec"></div>
             <div class="row"><button class="btn-ghost" onclick="testSync()">🔌 Test</button><button class="btn-primary" onclick="saveSync()">💾 Save & Start Sync</button></div>
             <div id="syncDiag" style="display:none;margin-top:8px;padding:10px;border-radius:8px;background:#fff;border:1px solid var(--line);font-size:12px;line-height:1.5"></div>
+            <div class="row" style="margin-top:8px;align-items:center">
+              <button id="syncNowBtn" class="btn-primary grow" onclick="syncNow()">🔄 Sync Now</button>
+              <span id="syncStatusLine" class="muted" style="font-size:12px;flex:1;text-align:right">Connecting…</span>
+            </div>
             <div class="row" style="margin-top:6px"><button class="btn-ok grow" onclick="syncAll()">⬆️ Upload My Data</button><button class="btn-ghost grow" onclick="pullData()">⬇️ Pull Latest</button></div>
             <p class="muted" style="font-size:11px;margin-top:6px"><b>First time setup:</b> On your MAIN device (with your menu/users) click <b>Save</b> then <b>Upload My Data</b>. On every OTHER device, paste the same URL and click <b>Save</b> — it pulls everything automatically. After that it stays in sync by itself.</p>
           </div>
@@ -729,7 +733,7 @@
    INDUS WOK POS  —  single-file, offline-first
    ============================================================ */
 const LS='induswok_pos_v1';
-const MENU_VERSION=2; // bump this number whenever the built-in menu changes
+const MENU_VERSION=3; // bump this number whenever the built-in menu changes
 const DEVICE_ID=(function(){try{let d=localStorage.getItem('iw_device_id');if(!d){d='dev_'+Math.random().toString(36).slice(2,9);localStorage.setItem('iw_device_id',d);}return d;}catch(e){return 'dev_x';}})();
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
@@ -802,365 +806,100 @@ function save(){pruneEmptyCarts();persist();schedulePush();}
 function seed(){
   const menu=[];
   const a=(cat,sub,name,full,half,veg)=>menu.push({id:uid('m'),cat,sub,name,full,half:half||0,veg});
-a("Soups","Veg","Lemon Coriander Soup",120,0,"veg");
-a("Soups","Veg","Manchow Soup",100,0,"veg");
-a("Soups","Veg","Clear Soup",110,0,"veg");
-a("Soups","Veg","Hot 'N' Sour Soup",110,0,"veg");
-a("Soups","Veg","Tomato Soup",110,0,"veg");
-a("Soups","Veg","Royal Soup",110,0,"veg");
-a("Soups","Veg","Sweet Corn Soup",130,0,"veg");
-a("Soups","Veg","Lung Fung Soup",140,0,"veg");
-a("Soups","Paneer/Mushroom","Lemon Coriander Soup",160,0,"veg");
-a("Soups","Paneer/Mushroom","Manchow Soup",140,0,"veg");
-a("Soups","Paneer/Mushroom","Clear Soup",150,0,"veg");
-a("Soups","Paneer/Mushroom","Hot 'N' Sour Soup",150,0,"veg");
-a("Soups","Paneer/Mushroom","Tomato Soup",150,0,"veg");
-a("Soups","Paneer/Mushroom","Royal Soup",160,0,"veg");
-a("Soups","Paneer/Mushroom","Sweet Corn Soup",160,0,"veg");
-a("Soups","Paneer/Mushroom","Lung Fung Soup",170,0,"veg");
-a("Soups","Chicken","Lemon Coriander Soup",140,0,"nonveg");
-a("Soups","Chicken","Manchow Soup",120,0,"nonveg");
-a("Soups","Chicken","Clear Soup",130,0,"nonveg");
-a("Soups","Chicken","Hot 'N' Sour Soup",130,0,"nonveg");
-a("Soups","Chicken","Tomato Soup",130,0,"nonveg");
-a("Soups","Chicken","Royal Soup",140,0,"nonveg");
-a("Soups","Chicken","Sweet Corn Soup",140,0,"nonveg");
-a("Soups","Chicken","Lung Fung Soup",150,0,"nonveg");
-a("Soups","Prawns","Lemon Coriander Soup",160,0,"nonveg");
-a("Soups","Prawns","Manchow Soup",140,0,"nonveg");
-a("Soups","Prawns","Clear Soup",150,0,"nonveg");
-a("Soups","Prawns","Hot 'N' Sour Soup",150,0,"nonveg");
-a("Soups","Prawns","Tomato Soup",150,0,"nonveg");
-a("Soups","Prawns","Royal Soup",160,0,"nonveg");
-a("Soups","Prawns","Sweet Corn Soup",160,0,"nonveg");
-a("Soups","Prawns","Lung Fung Soup",170,0,"nonveg");
-a("Starters","Veg","65 Style",200,0,"veg");
-a("Starters","Veg","Spring Roll (8 Pcs)",240,0,"veg");
-a("Starters","Veg","Chilly Dry / Gravy",200,0,"veg");
-a("Starters","Veg","Manchurian Dry / Gravy",200,0,"veg");
-a("Starters","Veg","Royal Chilly Dry / Gravy",230,0,"veg");
-a("Starters","Veg","Crispy Dry",240,0,"veg");
-a("Starters","Veg","Pepper Dry / Gravy",230,0,"veg");
-a("Starters","Paneer/Mushroom","65 Style",230,0,"veg");
-a("Starters","Paneer/Mushroom","Spring Roll (8 Pcs)",280,0,"veg");
-a("Starters","Paneer/Mushroom","Chilly Dry / Gravy",230,0,"veg");
-a("Starters","Paneer/Mushroom","Manchurian Dry / Gravy",230,0,"veg");
-a("Starters","Paneer/Mushroom","Royal Chilly Dry / Gravy",260,0,"veg");
-a("Starters","Paneer/Mushroom","Crispy Dry",260,0,"veg");
-a("Starters","Paneer/Mushroom","Pepper Dry / Gravy",260,0,"veg");
-a("Starters","Chicken","65 Style",200,0,"nonveg");
-a("Starters","Chicken","Spring Roll (8 Pcs)",240,0,"nonveg");
-a("Starters","Chicken","Chicken Satay",260,0,"nonveg");
-a("Starters","Chicken","Lollypop Oil Fry",200,0,"nonveg");
-a("Starters","Chicken","Lollypop Gravy",240,0,"nonveg");
-a("Starters","Chicken","Lollypop Masala Dry",240,0,"nonveg");
-a("Starters","Chicken","Lollypop Chilly Dry",240,0,"nonveg");
-a("Starters","Chicken","Lollypop Apple Dry",250,0,"nonveg");
-a("Starters","Chicken","Chilly Dry / Gravy",200,0,"nonveg");
-a("Starters","Chicken","Manchurian Dry / Gravy",200,0,"nonveg");
-a("Starters","Chicken","Royal Chilly Dry / Gravy",230,0,"nonveg");
-a("Starters","Chicken","Crispy Boneless Dry",240,0,"nonveg");
-a("Starters","Chicken","Pepper Dry / Gravy",230,0,"nonveg");
-a("Starters","Prawns","65 Style",240,0,"nonveg");
-a("Starters","Prawns","Chilly Dry / Gravy",240,0,"nonveg");
-a("Starters","Prawns","Manchurian Dry / Gravy",240,0,"nonveg");
-a("Starters","Prawns","Royal Chilly Dry / Gravy",270,0,"nonveg");
-a("Starters","Prawns","Pepper Dry / Gravy",270,0,"nonveg");
-a("Tandoori Starters","Veg","Paneer Tikka",230,0,"veg");
-a("Tandoori Starters","Veg","Paneer Achari Tikka",240,0,"veg");
-a("Tandoori Starters","Veg","Paneer Malai Tikka",250,0,"veg");
-a("Tandoori Starters","Veg","Paneer Hariyali Tikka",230,0,"veg");
-a("Tandoori Starters","Veg","Mushroom Tikka",220,0,"veg");
-a("Tandoori Starters","Chicken","Chicken Tandoori",360,200,"nonveg");
-a("Tandoori Starters","Chicken","Kalimiri Tandoori",380,220,"nonveg");
-a("Tandoori Starters","Chicken","Afghani Chicken Tandoori",410,240,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Dahi Lasuni Tandoori",410,240,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Malai Tandoori",420,230,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Pahadi Tandoori",380,220,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Lahori Tandoori",440,250,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Schezwan Tandoori",410,240,"nonveg");
-a("Tandoori Starters","Chicken","Banjara Kabab (8 Pcs)",260,0,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Tikka (8 Pcs)",220,0,"nonveg");
-a("Tandoori Starters","Chicken","Kalimiri Kabab (8 Pcs)",260,0,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Achari Tikka (8 Pcs)",240,0,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Pahadi Tikka (8 Pcs)",240,0,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Malai Tikka (8 Pcs)",280,0,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Reshmi Tikka (8 Pcs)",260,0,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Lasuni Kabab (8 Pcs)",260,0,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Tiranga Kabab (9 Pcs)",300,0,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Seekh Kabab",180,0,"nonveg");
-a("Tandoori Starters","Chicken","Chicken Leg Tandoori",140,0,"nonveg");
-a("Tandoori Starters","Chicken","Kalimiri Leg Tandoori",150,0,"nonveg");
-a("Tandoori Starters","Chicken","Tandoori Lollypop (6 Pcs)",260,0,"nonveg");
-a("Tandoori Starters","Chicken","Tandoori Prawns",340,0,"nonveg");
-a("Chopsuey","Veg","American Chopsuey",190,0,"veg");
-a("Chopsuey","Veg","Chinese Chopsuey",190,0,"veg");
-a("Chopsuey","Veg","Chinese Bhel",160,0,"veg");
-a("Chopsuey","Paneer/Mushroom","American Chopsuey",230,0,"veg");
-a("Chopsuey","Paneer/Mushroom","Chinese Chopsuey",230,0,"veg");
-a("Chopsuey","Paneer/Mushroom","Chinese Bhel",200,0,"veg");
-a("Chopsuey","Chicken","American Chopsuey",190,0,"nonveg");
-a("Chopsuey","Chicken","Chinese Chopsuey",190,0,"nonveg");
-a("Chopsuey","Chicken","Chinese Bhel",160,0,"nonveg");
-a("Chopsuey","Prawns","American Chopsuey",230,0,"nonveg");
-a("Chopsuey","Prawns","Chinese Chopsuey",230,0,"nonveg");
-a("Chopsuey","Prawns","Chinese Bhel",200,0,"nonveg");
-a("Chopsuey","Koliwada","Chicken Pakoda",210,0,"nonveg");
-a("Chopsuey","Koliwada","Chicken Pota / Liver",170,0,"nonveg");
-a("Chopsuey","Koliwada","Prawns Koliwada",310,0,"nonveg");
-a("Rice","Veg","Fried Rice",150,0,"veg");
-a("Rice","Veg","Green Chilli Rice",170,0,"veg");
-a("Rice","Veg","Schezwan Fried Rice",170,0,"veg");
-a("Rice","Veg","Combination Fried Rice",180,0,"veg");
-a("Rice","Veg","Tip Top Fried Rice",190,0,"veg");
-a("Rice","Veg","Singapore Fried Rice",200,0,"veg");
-a("Rice","Veg","Burnt Garlic Rice",200,0,"veg");
-a("Rice","Veg","Malaysian Rice",230,0,"veg");
-a("Rice","Paneer/Mushroom","Fried Rice",180,0,"veg");
-a("Rice","Paneer/Mushroom","Green Chilli Rice",190,0,"veg");
-a("Rice","Paneer/Mushroom","Schezwan Fried Rice",190,0,"veg");
-a("Rice","Paneer/Mushroom","Combination Fried Rice",190,0,"veg");
-a("Rice","Paneer/Mushroom","Tip Top Fried Rice",230,0,"veg");
-a("Rice","Paneer/Mushroom","Singapore Fried Rice",220,0,"veg");
-a("Rice","Paneer/Mushroom","Burnt Garlic Rice",230,0,"veg");
-a("Rice","Paneer/Mushroom","Malaysian Rice",270,0,"veg");
-a("Rice","Chicken","Egg Fried Rice",150,0,"nonveg");
-a("Rice","Chicken","Fried Rice",160,0,"nonveg");
-a("Rice","Chicken","Green Chilli Rice",180,0,"nonveg");
-a("Rice","Chicken","Schezwan Fried Rice",180,0,"nonveg");
-a("Rice","Chicken","Combination Fried Rice",180,0,"nonveg");
-a("Rice","Chicken","Tip Top Fried Rice",200,0,"nonveg");
-a("Rice","Chicken","Singapore Fried Rice",200,0,"nonveg");
-a("Rice","Chicken","Burnt Garlic Rice",200,0,"nonveg");
-a("Rice","Chicken","Malaysian Rice",230,0,"nonveg");
-a("Rice","Prawns","Fried Rice",190,0,"nonveg");
-a("Rice","Prawns","Green Chilli Rice",210,0,"nonveg");
-a("Rice","Prawns","Schezwan Fried Rice",210,0,"nonveg");
-a("Rice","Prawns","Combination Fried Rice",210,0,"nonveg");
-a("Rice","Prawns","Tip Top Fried Rice",240,0,"nonveg");
-a("Rice","Prawns","Singapore Fried Rice",240,0,"nonveg");
-a("Rice","Prawns","Burnt Garlic Rice",240,0,"nonveg");
-a("Rice","Prawns","Malaysian Rice",270,0,"nonveg");
-a("Rice with Gravy","Veg","Manchurian Fried Rice",220,0,"veg");
-a("Rice with Gravy","Veg","Triple Schezwan Rice",230,0,"veg");
-a("Rice with Gravy","Veg","Chopper Fried Rice",230,0,"veg");
-a("Rice with Gravy","Veg","Chilly Rice",260,0,"veg");
-a("Rice with Gravy","Veg","Cocktail Rice",260,0,"veg");
-a("Rice with Gravy","Veg","Chef Special Rice",260,0,"veg");
-a("Rice with Gravy","Veg","Pot Rice",260,0,"veg");
-a("Rice with Gravy","Veg","Nankin Rice",260,0,"veg");
-a("Rice with Gravy","Veg","Mongolian Rice",260,0,"veg");
-a("Rice with Gravy","Paneer/Mushroom","Manchurian Fried Rice",240,0,"veg");
-a("Rice with Gravy","Paneer/Mushroom","Triple Schezwan Rice",250,0,"veg");
-a("Rice with Gravy","Paneer/Mushroom","Chopper Fried Rice",250,0,"veg");
-a("Rice with Gravy","Paneer/Mushroom","Chilly Rice",290,0,"veg");
-a("Rice with Gravy","Paneer/Mushroom","Cocktail Rice",290,0,"veg");
-a("Rice with Gravy","Paneer/Mushroom","Chef Special Rice",290,0,"veg");
-a("Rice with Gravy","Paneer/Mushroom","Pot Rice",290,0,"veg");
-a("Rice with Gravy","Paneer/Mushroom","Nankin Rice",290,0,"veg");
-a("Rice with Gravy","Paneer/Mushroom","Mongolian Rice",290,0,"veg");
-a("Rice with Gravy","Chicken","Manchurian Fried Rice",220,0,"nonveg");
-a("Rice with Gravy","Chicken","Triple Schezwan Rice",230,0,"nonveg");
-a("Rice with Gravy","Chicken","Chopper Fried Rice",230,0,"nonveg");
-a("Rice with Gravy","Chicken","Chilly Rice",260,0,"nonveg");
-a("Rice with Gravy","Chicken","Cocktail Rice",260,0,"nonveg");
-a("Rice with Gravy","Chicken","Chef Special Rice",260,0,"nonveg");
-a("Rice with Gravy","Chicken","Pot Rice",260,0,"nonveg");
-a("Rice with Gravy","Chicken","Nankin Rice",260,0,"nonveg");
-a("Rice with Gravy","Chicken","Mongolian Rice",260,0,"nonveg");
-a("Rice with Gravy","Prawns","Manchurian Fried Rice",240,0,"nonveg");
-a("Rice with Gravy","Prawns","Triple Schezwan Rice",250,0,"nonveg");
-a("Rice with Gravy","Prawns","Chopper Fried Rice",250,0,"nonveg");
-a("Rice with Gravy","Prawns","Chilly Rice",290,0,"nonveg");
-a("Rice with Gravy","Prawns","Cocktail Rice",290,0,"nonveg");
-a("Rice with Gravy","Prawns","Chef Special Rice",290,0,"nonveg");
-a("Rice with Gravy","Prawns","Pot Rice",290,0,"nonveg");
-a("Rice with Gravy","Prawns","Nankin Rice",290,0,"nonveg");
-a("Rice with Gravy","Prawns","Mongolian Rice",290,0,"nonveg");
-a("Noodles","Veg","Hakka Noodles",150,0,"veg");
-a("Noodles","Veg","Green Chilli Noodles",170,0,"veg");
-a("Noodles","Veg","Schezwan Noodles",170,0,"veg");
-a("Noodles","Veg","Combination Noodles",170,0,"veg");
-a("Noodles","Veg","Tip Top Noodles",190,0,"veg");
-a("Noodles","Veg","Singapore Noodles",200,0,"veg");
-a("Noodles","Veg","Burnt Garlic Noodles",200,0,"veg");
-a("Noodles","Veg","Malaysian Noodles",230,0,"veg");
-a("Noodles","Paneer/Mushroom","Hakka Noodles",180,0,"veg");
-a("Noodles","Paneer/Mushroom","Green Chilli Noodles",190,0,"veg");
-a("Noodles","Paneer/Mushroom","Schezwan Noodles",190,0,"veg");
-a("Noodles","Paneer/Mushroom","Combination Noodles",190,0,"veg");
-a("Noodles","Paneer/Mushroom","Tip Top Noodles",230,0,"veg");
-a("Noodles","Paneer/Mushroom","Singapore Noodles",230,0,"veg");
-a("Noodles","Paneer/Mushroom","Burnt Garlic Noodles",230,0,"veg");
-a("Noodles","Paneer/Mushroom","Malaysian Noodles",260,0,"veg");
-a("Noodles","Chicken","Egg Hakka Noodles",150,0,"nonveg");
-a("Noodles","Chicken","Egg Schezwan Noodles",170,0,"nonveg");
-a("Noodles","Chicken","Hakka Noodles",160,0,"nonveg");
-a("Noodles","Chicken","Green Chilli Noodles",180,0,"nonveg");
-a("Noodles","Chicken","Schezwan Noodles",180,0,"nonveg");
-a("Noodles","Chicken","Combination Noodles",180,0,"nonveg");
-a("Noodles","Chicken","Tip Top Noodles",200,0,"nonveg");
-a("Noodles","Chicken","Singapore Noodles",200,0,"nonveg");
-a("Noodles","Chicken","Burnt Garlic Noodles",200,0,"nonveg");
-a("Noodles","Chicken","Malaysian Noodles",230,0,"nonveg");
-a("Noodles","Prawns","Hakka Noodles",190,0,"nonveg");
-a("Noodles","Prawns","Green Chilli Noodles",210,0,"nonveg");
-a("Noodles","Prawns","Schezwan Noodles",210,0,"nonveg");
-a("Noodles","Prawns","Combination Noodles",210,0,"nonveg");
-a("Noodles","Prawns","Tip Top Noodles",240,0,"nonveg");
-a("Noodles","Prawns","Singapore Noodles",240,0,"nonveg");
-a("Noodles","Prawns","Burnt Garlic Noodles",240,0,"nonveg");
-a("Noodles","Prawns","Malaysian Noodles",270,0,"nonveg");
-a("Noodles with Gravy","Veg","Manchurian Noodles",220,0,"veg");
-a("Noodles with Gravy","Veg","Triple Schezwan Noodles",230,0,"veg");
-a("Noodles with Gravy","Veg","Chopper Noodles",230,0,"veg");
-a("Noodles with Gravy","Veg","Chilly Noodles",260,0,"veg");
-a("Noodles with Gravy","Veg","Chef Special Noodles",260,0,"veg");
-a("Noodles with Gravy","Veg","Pot Noodles",260,0,"veg");
-a("Noodles with Gravy","Veg","Nankin Noodles",260,0,"veg");
-a("Noodles with Gravy","Veg","Mongolian Noodles",260,0,"veg");
-a("Noodles with Gravy","Paneer/Mushroom","Manchurian Noodles",250,0,"veg");
-a("Noodles with Gravy","Paneer/Mushroom","Triple Schezwan Noodles",250,0,"veg");
-a("Noodles with Gravy","Paneer/Mushroom","Chopper Noodles",270,0,"veg");
-a("Noodles with Gravy","Paneer/Mushroom","Chilly Noodles",290,0,"veg");
-a("Noodles with Gravy","Paneer/Mushroom","Chef Special Noodles",290,0,"veg");
-a("Noodles with Gravy","Paneer/Mushroom","Pot Noodles",290,0,"veg");
-a("Noodles with Gravy","Paneer/Mushroom","Nankin Noodles",290,0,"veg");
-a("Noodles with Gravy","Paneer/Mushroom","Mongolian Noodles",290,0,"veg");
-a("Noodles with Gravy","Chicken","Manchurian Noodles",220,0,"nonveg");
-a("Noodles with Gravy","Chicken","Triple Schezwan Noodles",230,0,"nonveg");
-a("Noodles with Gravy","Chicken","Chopper Noodles",230,0,"nonveg");
-a("Noodles with Gravy","Chicken","Chilly Noodles",260,0,"nonveg");
-a("Noodles with Gravy","Chicken","Chef Special Noodles",260,0,"nonveg");
-a("Noodles with Gravy","Chicken","Pot Noodles",260,0,"nonveg");
-a("Noodles with Gravy","Chicken","Nankin Noodles",260,0,"nonveg");
-a("Noodles with Gravy","Chicken","Mongolian Noodles",260,0,"nonveg");
-a("Noodles with Gravy","Prawns","Manchurian Noodles",250,0,"nonveg");
-a("Noodles with Gravy","Prawns","Triple Schezwan Noodles",250,0,"nonveg");
-a("Noodles with Gravy","Prawns","Chopper Noodles",270,0,"nonveg");
-a("Noodles with Gravy","Prawns","Chilly Noodles",290,0,"nonveg");
-a("Noodles with Gravy","Prawns","Chef Special Noodles",290,0,"nonveg");
-a("Noodles with Gravy","Prawns","Pot Noodles",290,0,"nonveg");
-a("Noodles with Gravy","Prawns","Nankin Noodles",290,0,"nonveg");
-a("Noodles with Gravy","Prawns","Mongolian Noodles",290,0,"nonveg");
-a("Main Course","Chicken & Prawns","Murg Musallam",690,390,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Handi",680,380,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Tikka Masala",230,0,"nonveg");
-a("Main Course","Chicken & Prawns","Butter Chicken",250,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Masala",210,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Korma",240,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Mughlai",240,0,"nonveg");
-a("Main Course","Chicken & Prawns","Angara Chicken",240,0,"nonveg");
-a("Main Course","Chicken & Prawns","Banjara Chicken",230,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Bhuna",240,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Chingari",230,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Tawa",230,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Kadai",240,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Kolhapuri",260,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Hyderabadi Masala",270,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Seekh Kabab Masala",260,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Kheema Masala",190,0,"nonveg");
-a("Main Course","Chicken & Prawns","Chicken Pota / Kaleji Masala",290,0,"nonveg");
-a("Main Course","Chicken & Prawns","Prawns Masala",310,0,"nonveg");
-a("Main Course","Chicken & Prawns","Prawns Hyderabadi Masala",310,0,"nonveg");
-a("Main Course","Chicken & Prawns","Prawns Kolhapuri",310,0,"nonveg");
-a("Main Course","Paneer","Paneer Handi",230,0,"veg");
-a("Main Course","Paneer","Paneer Hyderabadi",230,0,"veg");
-a("Main Course","Paneer","Paneer Matar",230,0,"veg");
-a("Main Course","Paneer","Paneer Bhurji",240,0,"veg");
-a("Main Course","Paneer","Paneer Mushroom Masala",230,0,"veg");
-a("Main Course","Paneer","Paneer Bhuna Masala",230,0,"veg");
-a("Main Course","Paneer","Paneer Kadai",220,0,"veg");
-a("Main Course","Paneer","Paneer Tikka Masala",240,0,"veg");
-a("Main Course","Paneer","Paneer Butter Masala",230,0,"veg");
-a("Main Course","Paneer","Paneer Chingari",220,0,"veg");
-a("Main Course","Paneer","Shahi Paneer",240,0,"veg");
-a("Main Course","Paneer","Paneer Lababdar",230,0,"veg");
-a("Main Course","Paneer","Paneer Kolhapuri",240,0,"veg");
-a("Main Course","Paneer","Paneer Maharaja",240,0,"veg");
-a("Main Course","Paneer","Paneer Tawa",230,0,"veg");
-a("Main Course","Paneer","Paneer Korma",240,0,"veg");
-a("Main Course","Paneer","Paneer Banjara Masala",230,0,"veg");
-a("Main Course","Veg","Veg Hyderabadi",210,0,"veg");
-a("Main Course","Veg","Sabji Kadai",190,0,"veg");
-a("Main Course","Veg","Sabji Handi",190,0,"veg");
-a("Main Course","Veg","Sabji Kolhapuri",190,0,"veg");
-a("Main Course","Veg","Mix Sabji",180,0,"veg");
-a("Main Course","Veg","Sabji Makkhanwala",190,0,"veg");
-a("Main Course","Veg","Sabji Tawa",200,0,"veg");
-a("Main Course","Veg","Sabji Korma",200,0,"veg");
-a("Main Course","Veg","Sabji Maharaja",220,0,"veg");
-a("Main Course","Veg","Chana Masala",160,0,"veg");
-a("Main Course","Veg","Aloo Gobi",160,0,"veg");
-a("Main Course","Veg","Aloo Tomato Capsicum",170,0,"veg");
-a("Main Course","Veg","Aloo Matar",170,0,"veg");
-a("Main Course","Veg","Aloo Soya Masala",180,0,"veg");
-a("Main Course","Veg","Soya Masala",170,0,"veg");
-a("Main Course","Veg","Soya Chana Masala",180,0,"veg");
-a("Main Course","Veg","Mushroom Masala",220,0,"veg");
-a("Main Course","Veg","Mushroom Kadai",230,0,"veg");
-a("Main Course","Veg","Mushroom Kolhapuri",240,0,"veg");
-a("Main Course","Veg","Mushroom Matar Masala",240,0,"veg");
-a("Main Course","Kofta","Veg Kofta",220,0,"veg");
-a("Main Course","Kofta","Nargis Kofta",240,0,"veg");
-a("Main Course","Kofta","Malai Kofta",240,0,"veg");
-a("Main Course","Kofta","Paneer Kofta",250,0,"veg");
-a("Main Course","Kofta","Cheese Kofta",270,0,"veg");
-a("Main Course","Dal","Dal Makhni",140,0,"veg");
-a("Main Course","Dal","Dal Fry",160,0,"veg");
-a("Main Course","Dal","Butter Dal Fry",150,0,"veg");
-a("Main Course","Dal","Dal Tadka",170,0,"veg");
-a("Main Course","Dal","Dal Lasuni",170,0,"veg");
-a("Main Course","Dal","Dal Kolhapuri",120,0,"veg");
-a("Main Course","Dal","Plain Dal",80,0,"veg");
-a("Main Course","Egg","Egg Curry",170,0,"nonveg");
-a("Main Course","Egg","Egg Masala",180,0,"nonveg");
-a("Main Course","Egg","Egg Bhurji",120,0,"nonveg");
-a("Main Course","Egg","Egg Omelette",80,0,"nonveg");
-a("Biryani & Rice","","Steam Rice",100,0,"veg");
-a("Biryani & Rice","","Jeera Rice",110,0,"veg");
-a("Biryani & Rice","","Chicken Biryani",200,0,"nonveg");
-a("Biryani & Rice","","Chicken Seekh Biryani",230,0,"nonveg");
-a("Biryani & Rice","","Chicken Tikka Biryani",230,0,"nonveg");
-a("Biryani & Rice","","Chicken Hyderabadi Biryani",210,0,"nonveg");
-a("Biryani & Rice","","Chicken Dum Biryani",250,0,"nonveg");
-a("Biryani & Rice","","Chicken Pulav",160,0,"nonveg");
-a("Biryani & Rice","","Prawns Biryani",290,0,"nonveg");
-a("Biryani & Rice","","Prawns Hyderabadi Biryani",320,0,"nonveg");
-a("Biryani & Rice","","Prawns Pulav",260,0,"nonveg");
-a("Biryani & Rice","","Egg Biryani",180,0,"nonveg");
-a("Biryani & Rice","","Veg Biryani",180,0,"veg");
-a("Biryani & Rice","","Veg Hyderabadi Biryani",190,0,"veg");
-a("Biryani & Rice","","Veg Pulav",150,0,"veg");
-a("Biryani & Rice","","Green Peas Pulav",160,0,"veg");
-a("Biryani & Rice","","Paneer Pulav",170,0,"veg");
-a("Biryani & Rice","","Paneer Biryani",220,0,"veg");
-a("Biryani & Rice","","Paneer Hyderabadi Biryani",230,0,"veg");
-a("Biryani & Rice","","Paneer Tikka Biryani",260,0,"veg");
-a("Biryani Per Kg","","Veg Biryani (Per Kg)",900,0,"veg");
-a("Biryani Per Kg","","Chicken Biryani (Per Kg)",1050,0,"nonveg");
-a("Biryani Per Kg","","Paneer Biryani (Per Kg)",1200,0,"veg");
-a("Breads","","Tandoori Roti",20,0,"veg");
-a("Breads","","Butter Roti",25,0,"veg");
-a("Breads","","Plain Naan",35,0,"veg");
-a("Breads","","Butter Naan",45,0,"veg");
-a("Breads","","Garlic Naan",55,0,"veg");
-a("Breads","","Cheese Garlic Naan",80,0,"veg");
-a("Breads","","Laccha Paratha",40,0,"veg");
-a("Breads","","Mirchi Paratha",60,0,"veg");
-a("Breads","","Plain Kulcha",30,0,"veg");
-a("Breads","","Butter Kulcha",40,0,"veg");
-a("Breads","","Aloo Paratha",80,0,"veg");
-a("Breads","","Paneer Paratha",120,0,"veg");
-a("Sides","","French Fries",100,0,"veg");
-a("Sides","","Peri Peri Fries",70,0,"veg");
-a("Sides","","Green Salad",60,0,"veg");
-a("Sides","","Veg Raita",70,0,"veg");
-a("Sides","","Boondi Raita",55,0,"veg");
-a("Sides","","Plain Curd",20,0,"veg");
-a("Sides","","Roasted Papad",25,0,"veg");
-a("Sides","","Fry Papad",50,0,"veg");
-a("Sides","","Masala Papad",50,0,"veg");
+a("Soups","Chicken","Chicken Manchow",150,0,"nonveg");
+a("Soups","Chicken","Chicken Lung Fung",180,0,"nonveg");
+a("Soups","Chicken","Chicken Hot & Sour",150,0,"nonveg");
+a("Soups","Chicken","Chicken Clear Soup",160,0,"nonveg");
+a("Soups","Chicken","Chicken Lemon Coriander",160,0,"nonveg");
+a("Soups","Chicken","Chicken Sweet Corn",170,0,"nonveg");
+a("Soups","Chicken","Chicken Thai Soup",210,0,"nonveg");
+a("Soups","Chicken","Chicken Wonton Soup",220,0,"nonveg");
+a("Soups","Chicken","Chicken Burnt Garlic",180,0,"nonveg");
+a("Soups","Chicken","Chicken Mushroom Soup",170,0,"nonveg");
+a("Soups","Chicken","Chicken Garlic Soup",150,0,"nonveg");
+a("Soups","Veg","Veg Manchow",120,0,"veg");
+a("Soups","Veg","Veg Hot & Sour",130,0,"veg");
+a("Soups","Veg","Veg Clear Soup",120,0,"veg");
+a("Soups","Veg","Veg Lemon Coriander",130,0,"veg");
+a("Soups","Veg","Veg Sweet Corn",130,0,"veg");
+a("Soups","Veg","Veg Mushroom Soup",140,0,"veg");
+a("Starters","","Chicken Lollipop (Oil)",220,0,"nonveg");
+a("Starters","","Chicken Lollipop Masala",250,0,"nonveg");
+a("Starters","","Chicken Chilli (Dry)",220,0,"nonveg");
+a("Starters","","Chicken 65 (Dry)",230,0,"nonveg");
+a("Starters","","Chicken Crispy",260,0,"nonveg");
+a("Starters","","Dragon Chicken",290,0,"nonveg");
+a("Starters","","Chicken Manchurian",220,0,"nonveg");
+a("Starters","","Chicken Black Pepper",290,0,"nonveg");
+a("Starters","","Chicken Kung Pao",250,0,"nonveg");
+a("Starters","","Chicken Lemon Pepper",270,0,"nonveg");
+a("Starters","","Seekh Chilli (Special)",260,0,"nonveg");
+a("Starters","","Paneer Chilli (Dry)",250,0,"veg");
+a("Starters","","Veg Crispy",270,0,"veg");
+a("Starters","","Mushroom Chilli",240,0,"veg");
+a("Starters","","Veg Manchurian (Dry)",240,0,"veg");
+a("Starters","","Gobi Manchurian",260,0,"veg");
+a("Starters","","Baby Corn Chilli",240,0,"veg");
+a("Rice","","Triple Schezwan Rice",240,0,"veg");
+a("Rice","","Chopper Rice",250,0,"veg");
+a("Rice","","Chicken Fried Rice",170,0,"nonveg");
+a("Rice","","Chicken Schezwan Rice",200,0,"nonveg");
+a("Rice","","Chicken Burnt Garlic",220,0,"nonveg");
+a("Rice","","Chicken Pot Rice",280,0,"nonveg");
+a("Rice","","Chicken HK Rice",230,0,"nonveg");
+a("Rice","","Chicken Singapore Rice",250,0,"nonveg");
+a("Rice","","Chicken Sherpa Rice",290,0,"nonveg");
+a("Rice","","Chicken Shanghai Rice",240,0,"nonveg");
+a("Rice","","Egg Fried Rice",150,0,"nonveg");
+a("Rice","","Chicken Korean Rice",290,0,"nonveg");
+a("Rice","","Chicken Thai Fried Rice",290,0,"nonveg");
+a("Rice","","Veg Triple Schezwan",230,0,"veg");
+a("Rice","","Veg Fried Rice",160,0,"veg");
+a("Rice","","Veg Schezwan Rice",170,0,"veg");
+a("Rice","","Veg Burnt Garlic Rice",210,0,"veg");
+a("Noodles","","Chicken Hakka Noodles",170,0,"nonveg");
+a("Noodles","","Chicken Triple Noodles",250,0,"nonveg");
+a("Noodles","","Green Chilli Noodles",180,0,"veg");
+a("Noodles","","Chicken Burnt Garlic",210,0,"nonveg");
+a("Noodles","","Schezwan Noodles",180,0,"veg");
+a("Noodles","","Veg Hakka Noodles",150,0,"veg");
+a("Noodles","","Veg Singapore Noodles",210,0,"veg");
+a("Noodles","","Veg HK Noodles",210,0,"veg");
+a("Noodles","","Veg Chopper Noodles",240,0,"veg");
+a("Noodles","","Veg Schezwan Noodles",180,0,"veg");
+a("Sushi","","Prawn Tempura",550,0,"nonveg");
+a("Sushi","","California Roll",550,0,"nonveg");
+a("Sushi","","Teriyaki Chicken Roll",450,0,"nonveg");
+a("Sushi","","Smoked Salmon Roll",550,0,"nonveg");
+a("Sushi","","Spicy Fish Roll",550,0,"nonveg");
+a("Sushi","","Asparagus Tempura",400,0,"veg");
+a("Sushi","","Philadelphia Veg",500,0,"veg");
+a("Sushi","","Crispy Tofu Roll",450,0,"veg");
+a("Ramen","","Chicken Paitan",480,0,"nonveg");
+a("Ramen","","Miso Ramen",450,0,"veg");
+a("Ramen","","Spicy Korean Ramen",450,0,"nonveg");
+a("Ramen","","Seafood Ramen",550,0,"nonveg");
+a("Ramen","","Shoyu Chicken",440,0,"nonveg");
+a("Ramen","","Exotic Veggie Ramen",400,0,"veg");
+a("Ramen","","Tantanmen",440,0,"nonveg");
+a("Ramen","","Curry Ramen",430,0,"nonveg");
+a("Ramen","","Kimchi Veg Ramen",400,0,"veg");
+a("Bao (3 Pcs)","","BBQ Chicken Bao",280,0,"nonveg");
+a("Bao (3 Pcs)","","Prawns Dynamite",320,0,"nonveg");
+a("Bao (3 Pcs)","","Teriyaki Chicken",260,0,"nonveg");
+a("Bao (3 Pcs)","","Hoisin Duck Style",300,0,"nonveg");
+a("Bao (3 Pcs)","","Spicy Paneer Bao",240,0,"veg");
+a("Bao (3 Pcs)","","Mushroom Melt",250,0,"veg");
+a("Bao (3 Pcs)","","Crispy Veg Bao",220,0,"veg");
+a("Bao (3 Pcs)","","Tofu Crunch",230,0,"veg");
+a("Sizzlers","","Chicken Steak",450,0,"nonveg");
+a("Sizzlers","","Triple Fusion",520,0,"nonveg");
+a("Sizzlers","","Prawns Garlic",550,0,"nonveg");
+a("Sizzlers","","Chicken Pepper",490,0,"nonveg");
+a("Sizzlers","","Paneer Tikka Fusion",450,0,"veg");
+a("Sizzlers","","Exotic Veg Sizzler",450,0,"veg");
+a("Sizzlers","","Mushroom Sizzler",460,0,"veg");
+a("Sizzlers","","Chinese Mixed Grill",450,0,"nonveg");
   const tables=[];
   for(let i=1;i<=10;i++)tables.push({id:'GF'+i,no:i,area:'Ground Floor',status:'available'});
   for(let i=1;i<=8;i++)tables.push({id:'FF'+i,no:i,area:'First Floor',status:'available'});
@@ -1181,7 +920,7 @@ a("Sides","","Masala Papad",50,0,"veg");
   const recipes=[
   ];
   const _find=(cat,name)=>{const m=menu.find(x=>x.name===name&&(!cat||x.cat===cat))||menu.find(x=>x.name===name);return m?m.id:null;};
-  [['Rice','Fried Rice','i4',0.2],['Main Course','Paneer Butter Masala','i2',0.2],['Main Course','Butter Chicken','i1',0.15]].forEach((r,n)=>{
+  [['Rice','Chicken Fried Rice','i1',0.15],['Rice','Veg Fried Rice','i4',0.2],['Starters','Paneer Chilli (Dry)','i2',0.2]].forEach((r,n)=>{
     const did=_find(r[0],r[1]); if(did)recipes.push({id:'r'+(n+1),dishId:did,invId:r[2],qty:r[3]});
   });
   const _recipesDummy=[
@@ -1704,7 +1443,7 @@ function applyKOTDeltaToBill(c,b){
   b.items=delta;
   return b;
 }
-function sameCartLine(a,b){normalizeCartItem(a);normalizeCartItem(b);return a.id===b.id&&a.size===b.size&&instructionKey(a)===instructionKey(b);}
+function sameCartLine(a,b){normalizeCartItem(a);normalizeCartItem(b);return a.id===b.id&&a.size===b.size&&instructionKey(a)===instructionKey(b)&&(+a.price||0)===(+b.price||0)&&!a.priceEdited&&!b.priceEdited;}
 function mergeDuplicateCartItems(){
   if(!cart||!cart.items)return;
   const merged=[];
@@ -1878,7 +1617,8 @@ function renderCart(){
     const r=document.createElement('div');r.className='ci';
     normalizeCartItem(i);
     const sub=itemSub(i), inst=itemInstructionText(i);
-    r.innerHTML=`<div class="nm">${escHTML(i.name)} ${i.size==='half'?'<small>(Half)</small>':''}<br><small>${money(i.price)}${sub?' · '+escHTML(sub):''}</small>${inst?`<span class="note">📝 ${escHTML(inst)}</span>`:''}<br><button class="btn-ghost" style="font-size:11px;padding:3px 7px;margin-top:4px" onclick="editCartItemOptions(${idx})">✏️ Note</button></div>
+    const priced=!!i.priceEdited;
+    r.innerHTML=`<div class="nm">${escHTML(i.name)} ${i.size==='half'?'<small>(Half)</small>':''}<br><small><span onclick="editPrice(${idx})" style="cursor:pointer;border-bottom:1px dashed var(--red);color:var(--red);font-weight:700" title="Tap to change price">${money(i.price)} ✏️</span>${priced?' <small style="color:var(--warn)">(edited)</small>':''}${sub?' · '+escHTML(sub):''}</small>${inst?`<span class="note">📝 ${escHTML(inst)}</span>`:''}<br><button class="btn-ghost" style="font-size:11px;padding:3px 7px;margin-top:4px" onclick="editCartItemOptions(${idx})">✏️ Note</button></div>
       <button class="qbtn" onclick="qty(${idx},-1)">−</button><b>${i.qty}</b><button class="qbtn" onclick="qty(${idx},1)">+</button>
       <div class="lt">${money(i.price*i.qty)}</div>`;
     ci.appendChild(r);
@@ -1905,6 +1645,17 @@ function toggleCart(open){
   panel.classList.toggle('open',open);
 }
 function qty(idx,d){cart.items[idx].qty+=d;if(cart.items[idx].qty<=0)cart.items.splice(idx,1);touchCart();save();renderCart();markOccupied();}
+function editPrice(idx){
+  const it=cart.items[idx];if(!it)return;
+  promptDlg('Edit price for '+it.name, it.price, function(v){
+    const p=parseFloat(v);
+    if(isNaN(p)||p<0){toast('Enter a valid price');return;}
+    it.price=Math.round(p*100)/100;
+    it.priceEdited=true;            // mark so we show "(edited)" and keep it on re-merge
+    touchCart();save();renderCart();markOccupied();
+    toast('Price updated to '+money(it.price));
+  }, {numeric:true,type:'number'});
+}
 function applyDisc(type,val){cart.disc={type,val};$('#custName')&&(cart.cust=$('#custName').value);touchCart();save();renderCart();}
 function clearCart(){confirmDlg('Clear this cart?',function(){
   if(hasKotSent(cart)){
@@ -2701,7 +2452,7 @@ function fillSettings(){
   $('#setKotRoll').value=s.kotRoll;$('#setKotFont').value=s.kotFont;$('#setKotAutoPrint').checked=!!s.kotAutoPrint;
   $('#setRawbtBill').checked=!!s.rawbtBill;$('#setRawbtKot').checked=!!s.rawbtKot;$('#setRawbtChars').value=s.rawbtChars||32;$('#setRawbtQR').checked=!!s.rawbtQR;$('#setRawbtCut').checked=!!s.rawbtCut;
   $('#setSyncUrl').value=s.syncUrl;$('#setAiProv').value=s.aiProv;$('#setAiKey').value=s.aiKey;
-  renderUsers();renderLicenseStatus();
+  renderUsers();updateSyncStatusUI();
 }
 function toggleGstFields(){const on=$('#setGstEnabled').checked;$('#gstRates').style.opacity=on?'1':'.4';$('#setCgst').disabled=!on;$('#setSgst').disabled=!on;}
 function saveSettings(){const s=DB.settings;s.name=$('#setName').value;s.tagline=$('#setTag').value;s.phone=$('#setPhone').value;s.addr1=$('#setAddr1').value;s.addr2=$('#setAddr2').value;s.gst=$('#setGst').value;s.upi=$('#setUpi').value;s.thanks=$('#setThanks').value;s.gstEnabled=$('#setGstEnabled').checked;s.cgst=+$('#setCgst').value||0;s.sgst=+$('#setSgst').value||0;save();$('#topTagline').textContent=s.tagline;toast('Saved ✅');}
@@ -2715,27 +2466,27 @@ function delUser(i){confirmDlg('Delete this user?',function(){DB.users.splice(i,
 /* test print */
 function testPrint(){
   const b={no:'TEST01',date:todayStr(),time:nowTime(),type:'Dine-in',table:'Table 1',cust:'Test Customer',by:CUR?CUR.name:'Owner',mode:'Cash',
-    items:[{name:'Chicken Manchow Soup',sub:'Non Veg',size:'full',price:150,qty:2,mods:['Less spicy'],note:'No oil'},{name:'Chilli Paneer',sub:'Veg Starter',size:'half',price:140,qty:1,mods:[],note:''}],
-    totals:{sub:440,disc:0,cgst:11,sgst:11,total:462,gstOn:true},total:462};
+    items:[{name:'Chicken Manchow',sub:'Chicken',size:'full',price:150,qty:2,mods:['Less spicy'],note:'No oil'},{name:'Chicken 65 (Dry)',sub:'Starters',size:'full',price:230,qty:1,mods:[],note:''}],
+    totals:{sub:530,disc:0,cgst:13.25,sgst:13.25,total:556.5,gstOn:true},total:556.5};
   doPrint(buildReceiptHTML(b,false),'🧾 Test Bill','bill',b);
 }
 function testKOTPrint(){
   const b={no:'KOT',date:todayStr(),time:nowTime(),type:'Dine-in',table:'Table 1',cust:'Test Customer',by:CUR?CUR.name:'Owner',mode:'Cash',
-    items:[{name:'Chicken Manchow Soup',sub:'Non Veg Soup',size:'full',price:150,qty:2,mods:['Less spicy','No oil'],note:''},{name:'Chilli Paneer',sub:'Veg Starter',size:'half',price:140,qty:1,mods:['Extra sauce'],note:'Make dry'}],
-    totals:{sub:440,disc:0,cgst:0,sgst:0,total:440,gstOn:false},total:440};
+    items:[{name:'Chicken Manchow',sub:'Chicken',size:'full',price:150,qty:2,mods:['Less spicy','No oil'],note:''},{name:'Chicken 65 (Dry)',sub:'Starters',size:'full',price:230,qty:1,mods:['Extra sauce'],note:'Make dry'}],
+    totals:{sub:530,disc:0,cgst:0,sgst:0,total:530,gstOn:false},total:530};
   doPrint(buildReceiptHTML(b,true),'🍳 Test KOT','kot',b);
 }
 // Direct RawBT test prints (skip preview) — handy to verify the thermal printer + QR.
 function testRawbtBill(){
   const b={no:'TEST01',date:todayStr(),time:nowTime(),type:'Dine-in',table:'Table 1',cust:'Test Customer',by:CUR?CUR.name:'Owner',mode:'UPI',
-    items:[{name:'Chicken Manchow Soup',sub:'Non Veg',size:'full',price:150,qty:2,mods:['Less spicy'],note:'No oil'},{name:'Chilli Paneer',sub:'Veg Starter',size:'half',price:140,qty:1,mods:[],note:''}],
-    totals:{sub:440,disc:0,cgst:11,sgst:11,total:462,gstOn:true},total:462};
+    items:[{name:'Chicken Manchow',sub:'Chicken',size:'full',price:150,qty:2,mods:['Less spicy'],note:'No oil'},{name:'Chicken 65 (Dry)',sub:'Starters',size:'full',price:230,qty:1,mods:[],note:''}],
+    totals:{sub:530,disc:0,cgst:13.25,sgst:13.25,total:556.5,gstOn:true},total:556.5};
   rawbtPrint(b,'bill');
 }
 function testRawbtKOT(){
   const b={no:'KOT',date:todayStr(),time:nowTime(),type:'Dine-in',table:'Table 1',cust:'Test Customer',by:CUR?CUR.name:'Owner',mode:'Cash',
-    items:[{name:'Chicken Manchow Soup',sub:'Non Veg Soup',size:'full',price:150,qty:2,mods:['Less spicy','No oil'],note:''},{name:'Chilli Paneer',sub:'Veg Starter',size:'half',price:140,qty:1,mods:['Extra sauce'],note:'Make dry'}],
-    totals:{sub:440,disc:0,cgst:0,sgst:0,total:440,gstOn:false},total:440};
+    items:[{name:'Chicken Manchow',sub:'Chicken',size:'full',price:150,qty:2,mods:['Less spicy','No oil'],note:''},{name:'Chicken 65 (Dry)',sub:'Starters',size:'full',price:230,qty:1,mods:['Extra sauce'],note:'Make dry'}],
+    totals:{sub:530,disc:0,cgst:0,sgst:0,total:530,gstOn:false},total:530};
   rawbtPrint(b,'kot');
 }
 function printDayReport(sid){
@@ -2778,8 +2529,20 @@ let _rev=0;              // revision number from the server
 let _pushTimer=null;     // debounce timer
 let _pushing=false, _pulling=false, _pendingPush=false;
 let _syncEnabled=false;
+let _checking=false;     // a lightweight rev-check is in flight
+let _lastSync=0;         // timestamp of the last successful contact with the server
+let _syncing=false;      // a manual "Sync now" is running (for button spinner)
 
 function syncUrl(){return (DB.settings.syncUrl||'').trim();}
+
+// fetch with a hard timeout so a hung request never stalls the poll loop
+function fetchT(url,opts,ms){
+  opts=opts||{};ms=ms||9000;
+  if(typeof AbortController==='undefined')return fetch(url,opts);
+  const ctl=new AbortController();
+  const id=setTimeout(()=>ctl.abort(),ms);
+  return fetch(url,Object.assign({},opts,{signal:ctl.signal})).finally(()=>clearTimeout(id));
+}
 
 function snapshot(){
   const o={rev:_rev,ts:Date.now(),device:DEVICE_ID};
@@ -2790,7 +2553,7 @@ function snapshot(){
 function schedulePush(){
   if(!_syncEnabled||!syncUrl())return;
   clearTimeout(_pushTimer);
-  _pushTimer=setTimeout(pushNow,700); // debounce rapid edits
+  _pushTimer=setTimeout(pushNow,350); // short debounce so edits propagate fast
 }
 async function pushNow(){
   if(!_syncEnabled||!syncUrl())return;
@@ -2798,13 +2561,30 @@ async function pushNow(){
   _pushing=true;
   try{
     const snap=snapshot();
-    const res=await fetch(syncUrl(),{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'put',rev:_rev,data:snap})});
+    const res=await fetchT(syncUrl(),{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'put',rev:_rev,data:snap})},12000);
     const j=await res.json();
     if(j&&j.rev!==undefined)_rev=j.rev;
     setSyncBadge('ok');
   }catch(e){setSyncBadge('off');console.warn('push failed',e);}
   _pushing=false;
   if(_pendingPush){_pendingPush=false;pushNow();}
+}
+// LIGHT poll: ask only for the revision number (tiny payload, very fast).
+// Only when it changed do we pay for a full snapshot download.
+async function pollRev(){
+  if(!_syncEnabled||!syncUrl())return;
+  if(_checking||_pulling||_pushing)return;
+  _checking=true;
+  try{
+    const res=await fetchT(syncUrl()+'?action=rev',{method:'GET'},7000);
+    const j=await res.json();
+    setSyncBadge('ok');
+    if(j&&j.rev!==undefined){
+      if(j.rev>_rev){ await pullNow(); }       // remote newer -> download full
+      else if(j.rev<_rev){ pushNow(); }        // ours newer -> push it up
+    }
+  }catch(e){setSyncBadge('off');/* older server without ?action=rev -> fall back */ try{await pullNow();}catch(_){}}
+  _checking=false;
 }
 async function pullNow(opts){
   opts=opts||{};
@@ -2813,7 +2593,7 @@ async function pullNow(opts){
   _pulling=true;
   let changed=false;
   try{
-    const res=await fetch(syncUrl()+'?action=get',{method:'GET'});
+    const res=await fetchT(syncUrl()+'?action=get',{method:'GET'},12000);
     const j=await res.json();
     if(j&&j.rev!==undefined){
       if(j.rev>_rev || opts.force){
@@ -2900,13 +2680,61 @@ function refreshActivePage(){
   if(map[id])map[id]();
   if(typeof updateDayBadge==='function')updateDayBadge();
 }
+function timeAgo(ts){
+  if(!ts)return 'never';
+  const s=Math.max(0,Math.round((Date.now()-ts)/1000));
+  if(s<5)return 'just now';
+  if(s<60)return s+'s ago';
+  const m=Math.round(s/60);
+  if(m<60)return m+'m ago';
+  const h=Math.round(m/60);return h+'h ago';
+}
+let _syncOnline=false;   // was the last network contact successful?
 function setSyncBadge(state){
+  // a 'ok' state means we actually reached the server just now
+  if(state==='ok'){_lastSync=Date.now();_syncOnline=true;}
+  else if(state==='off'){_syncOnline=false;}
+  renderSyncBadge();
+}
+function renderSyncBadge(){
   const el=document.getElementById('syncBadge');if(!el)return;
   if(!_syncEnabled){el.style.display='none';return;}
   el.style.display='inline-block';
-  if(state==='ok'){el.textContent='☁️ Synced';el.style.background='#e7f7ee';el.style.color='var(--ok)';}
+  el.style.cursor='pointer';
+  el.title='Tap to sync now';
+  if(!el._wired){el._wired=true;el.onclick=()=>syncNow();}
+  if(_syncing){el.textContent='☁️ Syncing…';el.style.background='#fff3cd';el.style.color='#8a6d00';}
+  else if(_syncOnline){el.textContent='☁️ '+timeAgo(_lastSync);el.style.background='#e7f7ee';el.style.color='var(--ok)';}
   else{el.textContent='☁️ Offline';el.style.background='#fdeceb';el.style.color='var(--red)';}
 }
+// Manual "Sync now": push my pending edits, then force-pull latest.
+async function syncNow(){
+  if(!syncUrl()){if($('#setSyncUrl')&&$('#setSyncUrl').value.trim()){saveSync();}else{toast('Save the Sync URL first');return;}}
+  if(_syncing)return;
+  _syncing=true;_syncEnabled=true;renderSyncBadge();updateSyncStatusUI();
+  const btn=document.getElementById('syncNowBtn');
+  if(btn){btn.disabled=true;btn._t=btn.textContent;btn.textContent='🔄 Syncing…';}
+  try{
+    await pushNow();
+    const ch=await pullNow({force:true});
+    _syncing=false;setSyncBadge('ok');
+    toast(ch?'✅ Synced — updated from server':'✅ Synced — up to date');
+  }catch(e){_syncing=false;setSyncBadge('off');toast('⚠️ Sync failed — check connection');}
+  if(btn){btn.disabled=false;btn.textContent=btn._t||'🔄 Sync Now';}
+  updateSyncStatusUI();
+}
+// keep the badge + settings line showing a fresh "X ago"
+function updateSyncStatusUI(){
+  renderSyncBadge();          // refresh the "X ago" text without faking a contact
+  const el=document.getElementById('syncStatusLine');
+  if(el){
+    if(!syncUrl())el.textContent='Not connected.';
+    else if(_syncing)el.textContent='Syncing…';
+    else if(!_syncOnline)el.textContent=_lastSync?('⚠️ Offline — last synced '+timeAgo(_lastSync)):'⚠️ Offline — connecting…';
+    else el.textContent='✅ Last synced '+timeAgo(_lastSync)+'.';
+  }
+}
+setInterval(()=>{ try{updateSyncStatusUI();}catch(e){} },1000);
 
 /* ---------- NEW ORDER ALERT (sound + visual) ---------- */
 let _syncReady=false;          // skip notifying on the first sync after load
@@ -2960,8 +2788,16 @@ function startSync(){
   if(_syncPoll){clearInterval(_syncPoll);_syncPoll=null;}
   if(!_syncEnabled){setSyncBadge('off');return;}
   pullNow({force:true});
-  _syncPoll=setInterval(()=>pullNow(),4000); // poll every 4s for near-instant cart sync
+  // Light revision check every 2.5s (tiny payload). Full download only on change.
+  _syncPoll=setInterval(()=>pollRev(),2500);
   setSyncBadge('ok');
+  // Re-check the moment the tab/app regains focus (waiters switching apps).
+  if(!startSync._wired){
+    startSync._wired=true;
+    document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollRev(); });
+    window.addEventListener('focus',()=>pollRev());
+    window.addEventListener('online',()=>{ setSyncBadge('ok'); pollRev(); });
+  }
 }
 
 /* legacy bill-level call now just triggers a debounced push */
@@ -3078,5 +2914,5 @@ async function boot(){
 boot();
 </script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0985f9fd89bc06b',t:'MTc4MTA5NDQ4MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0ca3b47189a2da3',t:'MTc4MTYxNzI4MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0985f9fd89bc06b',t:'MTc4MTA5NDQ4MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0d35b6d9ec747c5',t:'MTc4MTcxMjk2OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
