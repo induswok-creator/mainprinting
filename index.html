@@ -598,7 +598,7 @@
         <div class="scroll"><table id="vendorTable"><thead><tr><th>Name</th><th>Category</th><th>Phone</th><th>Outstanding</th><th></th></tr></thead><tbody></tbody></table></div>
       </div>
       <div class="card" style="margin-top:14px"><h3>📒 Purchase / Payment Ledger</h3>
-        <div class="scroll"><table id="vnLedger"><thead><tr><th>Date</th><th>Vendor</th><th>Type</th><th>Amount</th><th>Note</th></tr></thead><tbody></tbody></table></div>
+        <div class="scroll"><table id="vnLedger"><thead><tr><th>Date</th><th>Vendor</th><th>Type</th><th>Amount</th><th>Note</th><th></th></tr></thead><tbody></tbody></table></div>
       </div>
     </section>
 
@@ -2897,9 +2897,13 @@ function saveVendorTxn(){
   if(!vid||!amt){toast('Vendor & amount?');return;}
   const v=DB.vendors.find(x=>x.id===vid);
   if(type==='purchase')v.outstanding+=amt;else v.outstanding-=amt;
-  DB.vendorTxns.push({id:uid('vt'),ts:Date.now(),vendorId:vid,vendor:v.name,type,amt,note:$('#poNote').value});
+  const txn={id:uid('vt'),ts:Date.now(),vendorId:vid,vendor:v.name,type,amt,note:$('#poNote').value};
   // a purchase is also a cash/credit expense record
-  if(type==='purchase')DB.expenses.push({id:uid('e'),ts:Date.now(),cat:'Raw Materials',amt,desc:$('#poNote').value||('Purchase: '+v.name),vendor:v.name,mode:'Credit',by:CUR.name});
+  if(type==='purchase'){
+    const exp={id:uid('e'),ts:txn.ts,cat:'Raw Materials',amt,desc:txn.note||('Purchase: '+v.name),vendor:v.name,mode:'Credit',by:CUR.name,source:'vendorTxn',sourceId:txn.id};
+    DB.expenses.push(exp); txn.expenseId=exp.id;
+  }
+  DB.vendorTxns.push(txn);
   save();$('#poAmt').value='';$('#poNote').value='';renderVendors();toast('Saved');
 }
 function renderVendors(){
@@ -2916,10 +2920,77 @@ function renderVendors(){
   else tb.innerHTML=DB.vendors.map(v=>{tot+=v.outstanding;return `<tr><td>${v.name}</td><td>${v.cat}</td><td>${v.phone||'-'}</td><td style="color:${v.outstanding>0?'var(--red)':'var(--ok)'}">${money(v.outstanding)}</td><td><button class="btn-ghost" onclick="delVendor('${v.id}')">🗑️</button></td></tr>`;}).join('');
   $('#vnOutTotal').textContent='Total outstanding: '+money(tot);
   const lt=$('#vnLedger tbody');
-  if(!DB.vendorTxns.length)lt.innerHTML='<tr><td colspan="5" class="muted">No transactions.</td></tr>';
-  else lt.innerHTML=DB.vendorTxns.slice().reverse().slice(0,50).map(t=>`<tr><td>${new Date(t.ts).toLocaleDateString('en-IN')}</td><td>${t.vendor}</td><td>${t.type==='purchase'?'🛒 Purchase':'💸 Payment'}</td><td>${money(t.amt)}</td><td>${t.note||''}</td></tr>`).join('');
+  if(!DB.vendorTxns.length)lt.innerHTML='<tr><td colspan="6" class="muted">No transactions.</td></tr>';
+  else lt.innerHTML=DB.vendorTxns.slice().reverse().slice(0,50).map(t=>{
+    const acts=isDeveloper()?`<button class="btn-ghost" onclick="devEditVendorTxn('${t.id}')">✏️</button> <button class="btn-ghost" style="color:var(--red)" onclick="devDeleteVendorTxn('${t.id}')">🗑️</button>`:'';
+    return `<tr><td>${new Date(t.ts).toLocaleDateString('en-IN')}</td><td>${t.vendor}</td><td>${t.type==='purchase'?'🛒 Purchase':'💸 Payment'}</td><td>${money(t.amt)}</td><td>${t.note||''}</td><td>${acts}</td></tr>`;
+  }).join('');
 }
 function delVendor(id){confirmDlg('Delete this vendor?',function(){DB.vendors=DB.vendors.filter(v=>v.id!==id);save();renderVendors();},'Delete');}
+
+function vendorTxnEffect(type,amt){return type==='purchase'?(+amt||0):-(+amt||0);}
+function applyVendorTxnEffect(vendorId,type,amt,reverse){
+  const v=DB.vendors.find(x=>x.id===vendorId); if(!v)return;
+  v.outstanding += vendorTxnEffect(type,amt) * (reverse?-1:1);
+}
+function findVendorExpense(txn){
+  if(!txn||txn.type!=='purchase')return null;
+  if(txn.expenseId){const e=DB.expenses.find(x=>x.id===txn.expenseId); if(e)return e;}
+  return (DB.expenses||[]).find(e=>e.source==='vendorTxn'&&e.sourceId===txn.id) ||
+    (DB.expenses||[]).find(e=>e.cat==='Raw Materials' && e.vendor===txn.vendor && (+e.amt||0)===(+txn.amt||0) && (!txn.note || e.desc===txn.note || e.desc===('Purchase: '+txn.vendor)));
+}
+function syncVendorExpense(txn, oldTxn){
+  // Keep P&L expenses aligned with developer edits to purchase transactions.
+  const oldWasPurchase=oldTxn&&oldTxn.type==='purchase';
+  const newIsPurchase=txn&&txn.type==='purchase';
+  let e=oldWasPurchase?findVendorExpense(oldTxn):findVendorExpense(txn);
+  if(oldWasPurchase && !newIsPurchase){ if(e)DB.expenses=DB.expenses.filter(x=>x.id!==e.id); txn.expenseId=''; return; }
+  if(newIsPurchase){
+    const v=DB.vendors.find(x=>x.id===txn.vendorId);
+    if(e){ e.ts=txn.ts; e.amt=+txn.amt||0; e.desc=txn.note||('Purchase: '+txn.vendor); e.vendor=txn.vendor; e.source='vendorTxn'; e.sourceId=txn.id; txn.expenseId=e.id; }
+    else { e={id:uid('e'),ts:txn.ts,cat:'Raw Materials',amt:+txn.amt||0,desc:txn.note||('Purchase: '+txn.vendor),vendor:txn.vendor,mode:'Credit',by:(CUR&&CUR.name)||'Developer',source:'vendorTxn',sourceId:txn.id}; DB.expenses.push(e); txn.expenseId=e.id; }
+  }
+}
+function devEditVendorTxn(id){
+  if(!isDeveloper()){toast('Developer only');return;}
+  const t=DB.vendorTxns.find(x=>x.id===id); if(!t){toast('Transaction not found');return;}
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const opts=DB.vendors.map(v=>`<option value="${v.id}" ${v.id===t.vendorId?'selected':''}>${esc(v.name)}</option>`).join('');
+  const date=new Date(t.ts||Date.now()).toISOString().slice(0,10);
+  openModal(`<div class="box"><h2>🛠️ Edit Vendor Transaction</h2>
+    <p class="muted" style="font-size:12px">Developer edit for already-recorded vendor purchase/payment. Outstanding will be recalculated for this edit.</p>
+    <div class="field"><label>Vendor</label><select id="devVtVendor">${opts}</select></div>
+    <div class="row"><div class="grow field"><label>Type</label><select id="devVtType"><option value="purchase">Purchase (credit ↑)</option><option value="payment">Payment to vendor (credit ↓)</option></select></div><div class="grow field"><label>Amount ₹</label><input id="devVtAmt" type="number" value="${esc(t.amt)}"></div></div>
+    <div class="field"><label>Date</label><input id="devVtDate" type="date" value="${date}"></div>
+    <div class="field"><label>Note</label><input id="devVtNote" value="${esc(t.note||'')}"></div>
+    <div class="row"><button class="btn-ghost grow" onclick="closeModal()">Cancel</button><button class="btn-primary grow" onclick="devSaveVendorTxn('${id}')">💾 Save</button></div>
+  </div>`);
+  $('#devVtType').value=t.type||'payment';
+}
+function devSaveVendorTxn(id){
+  if(!isDeveloper()){toast('Developer only');return;}
+  const t=DB.vendorTxns.find(x=>x.id===id); if(!t){toast('Transaction not found');return;}
+  const old=JSON.parse(JSON.stringify(t));
+  applyVendorTxnEffect(old.vendorId,old.type,old.amt,true);
+  const vid=$('#devVtVendor').value, v=DB.vendors.find(x=>x.id===vid); if(!v){toast('Vendor missing');return;}
+  const amt=+$('#devVtAmt').value||0; if(!amt){toast('Amount required');return;}
+  t.vendorId=vid; t.vendor=v.name; t.type=$('#devVtType').value; t.amt=amt; t.note=$('#devVtNote').value; t.ts=new Date(($('#devVtDate').value||todayStr())+'T12:00:00').getTime();
+  applyVendorTxnEffect(t.vendorId,t.type,t.amt,false);
+  syncVendorExpense(t,old);
+  devAudit('edit_vendor_txn',{id,oldVendor:old.vendor,newVendor:t.vendor,oldAmt:old.amt,newAmt:t.amt,oldType:old.type,newType:t.type});
+  save();closeModal();renderVendors();toast('✅ Vendor transaction updated');
+}
+function devDeleteVendorTxn(id){
+  if(!isDeveloper()){toast('Developer only');return;}
+  const idx=DB.vendorTxns.findIndex(x=>x.id===id); if(idx<0){toast('Transaction not found');return;}
+  const t=DB.vendorTxns[idx];
+  confirmDlg('Developer: delete vendor '+(t.type==='purchase'?'purchase':'payment')+' of '+money(t.amt)+' for '+t.vendor+'?',function(){
+    applyVendorTxnEffect(t.vendorId,t.type,t.amt,true);
+    const e=findVendorExpense(t); if(e)DB.expenses=DB.expenses.filter(x=>x.id!==e.id);
+    DB.vendorTxns.splice(idx,1); devAudit('delete_vendor_txn',{id,vendor:t.vendor,type:t.type,amt:t.amt});
+    save();renderVendors();toast('🗑️ Vendor transaction deleted');
+  },'Delete');
+}
 
 /* enhance renderInv to also refresh smart-stock widgets */
 const _renderInv=renderInv;
@@ -2999,25 +3070,40 @@ function savePayment(){
   if(!amt){toast('Enter amount');return;}
   const st=DB.staff.find(s=>s.id===staffId);
   const date=$('#payDate').value||todayStr();
-  DB.payments.push({id:uid('p'),staffId,staffName:st?st.name:'',type:$('#payType').value,amt,
-    date,month:date.slice(0,7),mode:$('#payMode2').value,note:$('#payNote').value,by:CUR.name,ts:Date.now()});
-  // also log salary/advance/bonus payouts as an expense for accurate P&L
   const t=$('#payType').value;
-  if(t!=='Tip'&&t!=='Deduction'){
-    DB.expenses.push({id:uid('e'),ts:Date.now(),cat:'Salary',amt,desc:t+' — '+(st?st.name:''),vendor:st?st.name:'',mode:$('#payMode2').value,by:CUR.name});
+  const pay={id:uid('p'),staffId,staffName:st?st.name:'',type:t,amt,
+    date,month:date.slice(0,7),mode:$('#payMode2').value,note:$('#payNote').value,by:CUR.name,ts:Date.now()};
+  // also log salary/advance/bonus payouts as an expense for accurate P&L
+  if(payrollNeedsExpense(t)){
+    const exp={id:uid('e'),ts:pay.ts,cat:'Salary',amt,desc:t+' — '+(st?st.name:''),vendor:st?st.name:'',mode:pay.mode,by:CUR.name,source:'payroll',sourceId:pay.id};
+    DB.expenses.push(exp); pay.expenseId=exp.id;
   }
+  DB.payments.push(pay);
   save();$('#payAmt').value='';$('#payNote').value='';renderPayroll();toast('💵 '+t+' recorded for '+(st?st.name:''));
 }
 const ADD_TYPES=['Bonus','Tip','Overtime'];      // increase net due
 const SUB_TYPES=['Advance','Deduction'];          // decrease net due
+function payrollNeedsExpense(type){return type!=='Tip'&&type!=='Deduction';}
 function renderPayroll(){
   if(!$('#prMonth').value)$('#prMonth').value=new Date().toISOString().slice(0,7);
   if(!$('#payDate').value)$('#payDate').value=todayStr();
   const month=curMonth();
-  // staff dropdowns
+  // staff dropdowns — preserve selected staff during auto-refresh/sync refresh.
+  // Previously renderPayroll() rebuilt these selects every refresh, so the selection jumped back to the first staff.
+  const paySel=$('#payStaff'), filterSel=$('#payFilterStaff');
+  const selectedStaff=paySel?paySel.value:'';
+  const selectedFilter=filterSel?filterSel.value:'';
   const opts=DB.staff.map(s=>`<option value="${s.id}">${s.name} (${s.role})</option>`).join('');
-  $('#payStaff').innerHTML=opts||'<option value="">— add staff first —</option>';
-  $('#payFilterStaff').innerHTML='<option value="">All staff</option>'+opts;
+  if(paySel){
+    const html=opts||'<option value="">— add staff first —</option>';
+    if(paySel.innerHTML!==html) paySel.innerHTML=html;
+    if(selectedStaff && DB.staff.some(s=>s.id===selectedStaff)) paySel.value=selectedStaff;
+  }
+  if(filterSel){
+    const html='<option value="">All staff</option>'+opts;
+    if(filterSel.innerHTML!==html) filterSel.innerHTML=html;
+    if(selectedFilter==='' || DB.staff.some(s=>s.id===selectedFilter)) filterSel.value=selectedFilter;
+  }
   payTypeHint();
   // per-staff summary
   const tb=$('#payrollSummary tbody');
@@ -3042,10 +3128,53 @@ function renderPayroll(){
   if(!hist.length)hb.innerHTML='<tr><td colspan="8" class="muted">No payments recorded for this month.</td></tr>';
   else hb.innerHTML=hist.slice().reverse().map(p=>{
     const sign=ADD_TYPES.includes(p.type)?'+':(SUB_TYPES.includes(p.type)?'−':'');
-    return `<tr><td>${p.date}</td><td>${p.staffName}</td><td>${p.type}</td><td>${sign}${money(p.amt)}</td><td>${p.mode}</td><td>${p.note||''}</td><td>${p.by}</td><td><button class="btn-ghost" onclick="delPayment('${p.id}')">🗑️</button></td></tr>`;
+    const acts=(isDeveloper()?`<button class="btn-ghost" onclick="devEditPayrollPayment('${p.id}')">✏️</button> `:'')+`<button class="btn-ghost" onclick="delPayment('${p.id}')">🗑️</button>`;
+    return `<tr><td>${p.date}</td><td>${p.staffName}</td><td>${p.type}</td><td>${sign}${money(p.amt)}</td><td>${p.mode}</td><td>${p.note||''}</td><td>${p.by}</td><td>${acts}</td></tr>`;
   }).join('');
 }
-function delPayment(id){confirmDlg('Delete this payment record?',function(){DB.payments=DB.payments.filter(p=>p.id!==id);save();renderPayroll();},'Delete');}
+function findPayrollExpense(pay){
+  if(!pay||!payrollNeedsExpense(pay.type))return null;
+  if(pay.expenseId){const e=DB.expenses.find(x=>x.id===pay.expenseId); if(e)return e;}
+  return (DB.expenses||[]).find(e=>e.source==='payroll'&&e.sourceId===pay.id) ||
+    (DB.expenses||[]).find(e=>e.cat==='Salary' && e.vendor===pay.staffName && (+e.amt||0)===(+pay.amt||0) && e.desc===(pay.type+' — '+pay.staffName));
+}
+function syncPayrollExpense(pay, oldPay){
+  const oldNeeds=oldPay&&payrollNeedsExpense(oldPay.type), newNeeds=pay&&payrollNeedsExpense(pay.type);
+  let e=oldNeeds?findPayrollExpense(oldPay):findPayrollExpense(pay);
+  if(oldNeeds && !newNeeds){ if(e)DB.expenses=DB.expenses.filter(x=>x.id!==e.id); pay.expenseId=''; return; }
+  if(newNeeds){
+    if(e){ e.ts=pay.ts||Date.now(); e.amt=+pay.amt||0; e.desc=pay.type+' — '+pay.staffName; e.vendor=pay.staffName; e.mode=pay.mode; e.source='payroll'; e.sourceId=pay.id; pay.expenseId=e.id; }
+    else { e={id:uid('e'),ts:pay.ts||Date.now(),cat:'Salary',amt:+pay.amt||0,desc:pay.type+' — '+pay.staffName,vendor:pay.staffName,mode:pay.mode,by:(CUR&&CUR.name)||'Developer',source:'payroll',sourceId:pay.id}; DB.expenses.push(e); pay.expenseId=e.id; }
+  }
+}
+function delPayment(id){confirmDlg('Delete this payment record?',function(){const p=DB.payments.find(x=>x.id===id);const e=findPayrollExpense(p);if(e)DB.expenses=DB.expenses.filter(x=>x.id!==e.id);DB.payments=DB.payments.filter(p=>p.id!==id);save();renderPayroll();},'Delete');}
+function devEditPayrollPayment(id){
+  if(!isDeveloper()){toast('Developer only');return;}
+  const p=DB.payments.find(x=>x.id===id); if(!p){toast('Payment not found');return;}
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const staffOpts=DB.staff.map(s=>`<option value="${s.id}" ${s.id===p.staffId?'selected':''}>${esc(s.name)} (${esc(s.role||'')})</option>`).join('');
+  openModal(`<div class="box"><h2>🛠️ Edit Payroll Payment</h2>
+    <p class="muted" style="font-size:12px">Developer edit for already-recorded payroll payment. Linked Salary expense will be updated automatically when applicable.</p>
+    <div class="field"><label>Staff</label><select id="devPayStaff">${staffOpts}</select></div>
+    <div class="row"><div class="grow field"><label>Type</label><select id="devPayType"><option>Salary</option><option>Advance</option><option>Bonus</option><option>Tip</option><option>Deduction</option><option>Overtime</option></select></div><div class="grow field"><label>Amount ₹</label><input id="devPayAmt" type="number" value="${esc(p.amt)}"></div></div>
+    <div class="row"><div class="grow field"><label>Date</label><input id="devPayDate" type="date" value="${esc(p.date||todayStr())}"></div><div class="grow field"><label>Mode</label><select id="devPayMode"><option>Cash</option><option>UPI</option><option>Bank Transfer</option></select></div></div>
+    <div class="field"><label>Note</label><input id="devPayNote" value="${esc(p.note||'')}"></div>
+    <div class="row"><button class="btn-ghost grow" onclick="closeModal()">Cancel</button><button class="btn-primary grow" onclick="devSavePayrollPayment('${id}')">💾 Save</button></div>
+  </div>`);
+  $('#devPayType').value=p.type||'Salary'; $('#devPayMode').value=p.mode||'Cash';
+}
+function devSavePayrollPayment(id){
+  if(!isDeveloper()){toast('Developer only');return;}
+  const p=DB.payments.find(x=>x.id===id); if(!p){toast('Payment not found');return;}
+  const old=JSON.parse(JSON.stringify(p));
+  const st=DB.staff.find(s=>s.id===$('#devPayStaff').value); if(!st){toast('Staff not found');return;}
+  const amt=+$('#devPayAmt').value||0; if(!amt){toast('Amount required');return;}
+  const date=$('#devPayDate').value||todayStr();
+  p.staffId=st.id; p.staffName=st.name; p.type=$('#devPayType').value; p.amt=amt; p.date=date; p.month=date.slice(0,7); p.mode=$('#devPayMode').value; p.note=$('#devPayNote').value; p.editedBy=(CUR&&CUR.name)||'Developer'; p.editedAt=Date.now();
+  syncPayrollExpense(p,old);
+  devAudit('edit_payroll_payment',{id,oldStaff:old.staffName,newStaff:p.staffName,oldAmt:old.amt,newAmt:p.amt,oldType:old.type,newType:p.type});
+  save();closeModal();renderPayroll();toast('✅ Payroll payment updated');
+}
 function exportPayrollCSV(){
   const month=curMonth();
   const rows=[['Date','Staff','Role','Type','Amount','Mode','Note','By']];
@@ -3605,5 +3734,5 @@ async function boot(){
 }
 boot();
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0f6ed852febff69',t:'MTc4MjA4NTk1NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
