@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Indus Wok — Restaurant POS (Firebase Real-time)</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --red:#b91327; --red-d:#7e0c1a; --red-l:#d83244;
+    --gold:#c79a3a; --gold-d:#9c7728;
+    --bg:#fbf6ee; --card:#ffffff; --ink:#241f1d; --muted:#8a8a8a;
+    --line:#ecdfc9; --ok:#1c9c4a; --warn:#e08a00; --occ:#b91327; --res:#7a52d1;
+    --shadow:0 6px 18px rgba(126,12,26,.10);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow-x:hidden;max-width:100%}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-size:14px;padding:10px 14px;background:#eee;transition:.12s}
+  button:active{transform:translateY(1px)}
+  input,select,textarea{font-family:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;width:100%;background:#fff;color:var(--ink)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--red-l);border-color:transparent}
+  .btn-primary{background:var(--red);color:#fff;font-weight:600}
+  .btn-primary:hover{background:var(--red-d)}
+  .btn-ghost{background:#fff;border:1px solid var(--line)}
+  .btn-ok{background:var(--ok);color:#fff;font-weight:600}
+  .btn-warn{background:var(--warn);color:#fff}
+  .pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700}
+  .hidden{display:none!important}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .grow{flex:1;min-width:0}
+  .muted{color:var(--muted)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
+  h2{margin:0 0 12px;font-size:18px}
+  h3{margin:0 0 10px;font-size:15px}
+  label{font-size:12px;font-weight:600;color:#555;display:block;margin:0 0 4px}
+  .field{margin-bottom:10px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+  .scroll{overflow:auto}
+  #login{position:fixed;inset:0;background:linear-gradient(160deg,#b91327,#7e0c1a 60%,#3a0608);display:flex;align-items:center;justify-content:center;z-index:100}
+  .login-card{background:#fff;border-radius:20px;padding:26px;width:340px;max-width:92vw;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35);border-top:5px solid var(--gold)}
+  .logo{font-size:40px}
+  .brand{font-size:24px;font-weight:800;color:var(--red);margin:4px 0 0;letter-spacing:.5px}
+  .pin-dots{display:flex;gap:10px;justify-content:center;margin:10px 0 14px}
+  .pin-dots span{width:14px;height:14px;border-radius:50%;background:#eee;border:1px solid var(--line)}
+  .pin-dots span.on{background:var(--red)}
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .keypad button{padding:16px;font-size:20px;background:#fbeceb;color:var(--red-d);font-weight:700;border-radius:14px}
+  #app{display:none;min-height:100%}
+  header.top{position:sticky;top:0;z-index:30;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:8px 14px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+  nav.tabs{display:flex;gap:6px;overflow:auto;padding:8px 14px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:49px;z-index:25}
+  nav.tabs button{background:#fff;border:1px solid var(--line);white-space:nowrap;padding:8px 14px;border-radius:999px;font-weight:600;color:#555}
+  nav.tabs button.active{background:var(--red);color:#fff;border-color:var(--red)}
+  .page{display:none}.page.active{display:block}
+  .billing-wrap{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
+  .cart{position:sticky;top:108px}
+  @media(max-width:640px){.billing-wrap{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="login-card">
+    <div class="logo">🥢</div>
+    <div class="brand">Indus Wok</div>
+    <div class="user-select" id="userSelect"></div>
+    <div class="pin-dots" id="pinDots"></div>
+    <div class="keypad" id="keypad"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header class="top">
+    <div class="title" style="font-weight:800;color:var(--red)">🥢 Indus Wok</div>
+    <span id="syncBadge" style="font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px;background:#eee">Cloud: Off</span>
+    <div id="whoBox" style="margin-left:auto;font-size:12px"></div>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <main style="padding:15px">
+    <!-- DASHBOARD -->
+    <section class="page active" id="page-dash">
+      <h2>📊 Dashboard</h2>
+      <div id="dashStats" class="row"></div>
+    </section>
+
+    <!-- SETTINGS (Where Firebase URL is entered) -->
+    <section class="page" id="page-settings">
+      <h2>⚙️ Settings</h2>
+      <div class="card">
+        <h3>☁️ Firebase Real-time Sync</h3>
+        <p class="muted">Paste your Firebase Database URL here.</p>
+        <input id="setSyncUrl" placeholder="https://your-project.firebaseio.com/">
+        <div class="row" style="margin-top:10px">
+          <button class="btn-primary" onclick="saveSync()">💾 Save & Connect</button>
+          <button class="btn-ghost" onclick="testSync()">🔌 Test Connection</button>
+        </div>
+        <div id="syncDiag" style="display:none;margin-top:10px;padding:10px;background:#f8f9fa;border-radius:8px"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ============================================================
+   INDUS WOK POS - FIREBASE ENGINE
+   ============================================================ */
+const LS='induswok_pos_v1';
+const DEVICE_ID='dev_'+Math.random().toString(36).slice(2,7);
+const $=s=>document.querySelector(s);
+let DB = load();
+let _rev = 0;
+let _pushing = false;
+let _dbRef = null;
+
+function load(){
+    const d=localStorage.getItem(LS);
+    return d ? JSON.parse(d) : {
+        settings:{syncUrl:''},
+        users:[{name:'Owner',pin:'1111',role:'Owner'}],
+        bills:[], menu:[], carts:{}
+    };
+}
+
+function save(){
+    localStorage.setItem(LS, JSON.stringify(DB));
+    pushNow(); // Push to Firebase on every save
+}
+
+/* FIREBASE LOGIC */
+function saveSync(){
+    DB.settings.syncUrl = $('#setSyncUrl').value.trim();
+    save();
+    location.reload(); // Refresh to init Firebase
+}
+
+function startSync(){
+    const url = DB.settings.syncUrl;
+    if(!url) return;
+
+    // Initialize Firebase
+    firebase.initializeApp({ databaseURL: url });
+    _dbRef = firebase.database().ref('pos_data');
+
+    // Real-time listener
+    _dbRef.on('value', (snapshot) => {
+        const remote = snapshot.val();
+        if(remote && remote.rev > _rev){
+            console.log("Incoming Real-time Sync...");
+            _rev = remote.rev;
+            Object.assign(DB, remote.data);
+            localStorage.setItem(LS, JSON.stringify(DB));
+            updateUI();
+            $('#syncBadge').textContent = '☁️ Live';
+            $('#syncBadge').style.background = '#e7f7ee';
+        }
+    });
+}
+
+async function pushNow(){
+    if(!_dbRef || _pushing) return;
+    _pushing = true;
+    _rev++;
+    try {
+        await _dbRef.set({
+            rev: _rev,
+            data: DB,
+            ts: Date.now(),
+            device: DEVICE_ID
+        });
+        $('#syncBadge').textContent = '☁️ Synced';
+    } catch(e) {
+        $('#syncBadge').textContent = '☁️ Error';
+    }
+    _pushing = false;
+}
+
+function testSync(){
+    const url = $('#setSyncUrl').value;
+    if(!url.startsWith('https://')){ alert("Invalid URL"); return; }
+    alert("Connection testing... (Check Firebase Console)");
+}
+
+function updateUI(){
+    // This is where your table rendering / dashboard logic goes
+    $('#dashStats').innerHTML = `Total Bills: ${DB.bills.length}`;
+}
+
+// Start Up
+if(DB.settings.syncUrl) startSync();
+$('#setSyncUrl').value = DB.settings.syncUrl;
+$('#app').style.display = 'block';
+$('#login').style.display = 'none';
+updateUI();
+
+</script>
+</body>
+</html>
