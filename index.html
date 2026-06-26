@@ -49,7 +49,7 @@
   .scroll{overflow:auto}
 #netBanner{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91327;color:#fff;padding:7px;text-align:center;font-weight:800}
 #loginErr{color:#b91327;font-size:12px;min-height:18px;margin-top:6px;font-weight:700}
-.user-select button{min-width:84px}
+.user-select button{min-width:86px}
 
 
   /* ---------- LOGIN ---------- */
@@ -284,14 +284,14 @@
 </style>
 </head>
 <body>
-<div id="netBanner">📴 Offline – queued locally</div>
+<div id="netBanner">📴 Offline – queued locally – auto-sync on reconnect</div>
 
 <!-- ================= LOGIN ================= -->
 <div id="login">
   <div class="login-card">
     <div class="logo">🥢</div>
     <div class="brand">Indus Wok</div>
-    <div class="brand-sub">Restaurant POS · v11</div>
+    <div class="brand-sub">Restaurant POS · v12.2 Firebase Live</div>
     <div class="user-select" id="userSelect"></div>
     <div class="pin-dots" id="pinDots"></div>
     <div class="keypad" id="keypad"></div>
@@ -722,7 +722,24 @@
     <!-- ===== SETTINGS ===== -->
     <section class="page" id="page-settings">
       <h2>⚙️ Settings</h2>
-<div id="devStressCard" class="card" style="margin-bottom:14px;border-left:4px solid var(--gold);display:none"><h3>🧪 Dev — Sync Stress Test</h3><div class="row"><button class="btn-warn" onclick="runStressTest(50)">Run 50x</button><button class="btn-ghost" onclick="runStressTest(200)">Run 200x</button><button class="btn-ghost" onclick="alert(JSON.stringify(iwSyncDiag(),null,2))">📊 Diag</button><button class="btn-ok" onclick="syncNow()">🔄 Resync</button><button class="btn-ghost" onclick="if(confirm('Reset USERS?')){localStorage.clear();DB.users=seed().users.slice();save();location.reload();}">🔧 Fix Login</button></div><div id="syncHealth" style="font-size:12px;margin-top:8px;font-family:monospace">—</div></div>
+      <div id="devStressCard" class="card" style="margin-bottom:14px;border-left:4px solid var(--gold);display:none">
+        <h3>🧪 Dev — Multi-Device Sync Doctor</h3>
+        <p class="muted" style="font-size:12px">Laptop ↔ Mobile live sync test – Firebase Firestore</p>
+        <div class="row" style="margin-bottom:8px">
+          <button class="btn-warn" onclick="runStressTest(50)">Run 50x</button>
+          <button class="btn-ghost" onclick="runStressTest(200)">Run 200x</button>
+          <button class="btn-ok" onclick="syncNow()">🔄 Force Resync</button>
+          <button class="btn-ghost" onclick="alert(JSON.stringify(iwSyncDiag(),null,2))">📊 Diag</button>
+        </div>
+        <div class="row" style="margin-bottom:8px">
+          <button class="btn-ghost" onclick="testPing()">📡 Ping other devices</button>
+          <button class="btn-ghost" onclick="repairSync()">🛠️ Repair Sync</button>
+          <button class="btn-ghost" onclick="if(confirm('Reset USERS & clear cache?')){localStorage.clear(); DB.users=seed().users.slice(); save(); location.reload();}">🔧 Fix Login</button>
+        </div>
+        <div id="syncHealth" style="font-size:13px;margin-top:6px;font-family:monospace;background:#fff6f4;padding:8px;border-radius:8px;border:1px solid var(--line)">—</div>
+        <div id="syncDoctor" style="font-size:11px;margin-top:6px;color:#555;line-height:1.5"></div>
+        <div id="deviceList" style="font-size:11px;margin-top:6px"></div>
+      </div>
       <div class="grid2">
         <div class="card"><h3>🏪 Restaurant Info (printed on bills)</h3>
           <div class="field"><label>Name</label><input id="setName"></div>
@@ -1091,23 +1108,20 @@ function renderLogin(){
     var lg=document.getElementById('login'); if(lg){ lg.style.display='flex'; lg.style.visibility='visible'; }
     var ap=document.getElementById('app'); if(ap) ap.style.display='none';
   }catch(e){}
-  // ALWAYS ensure users exist
+  // ALWAYS ensure DB.users exists – Firebase empty-doc guard
   try{
-    if(typeof DB==='undefined' || !DB || !DB.users || DB.users.length<3){
-      if(typeof seed==='function'){ DB = seed(); }
-      else { DB={users:[{name:'Owner',pin:'1111',role:'Owner'},{name:'Cashier',pin:'2222',role:'Cashier'},{name:'Waiter',pin:'3333',role:'Waiter'},{name:'Partner',pin:'4444',role:'Partner'},{name:'Developer',pin:'8746',role:'Developer',hidden:true}]}; }
-      if(typeof persist==='function') persist();
+    if(typeof DB==='undefined' || !DB || !DB.users || DB.users.length < 3){
+      if(typeof seed==='function'){ DB = seed(); if(typeof persist==='function') persist(); }
     }
     if(typeof ensureSystemUsers==='function') ensureSystemUsers(DB);
-  }catch(e){ console.error(e); }
+  }catch(e){ console.error('login seed',e); }
   var us=document.getElementById('userSelect');
   if(!us){
-    if(_loginTries<30) setTimeout(renderLogin,150);
+    if(_loginTries<40) setTimeout(renderLogin,180);
     return;
   }
   us.innerHTML='';
-  // HARD-CODED FALLBACK USERS - guarantees pad ALWAYS shows
-  var FALLBACK_USERS=[
+  var FALLBACK=[
     {name:'Owner',pin:'1111',role:'Owner'},
     {name:'Cashier',pin:'2222',role:'Cashier'},
     {name:'Waiter',pin:'3333',role:'Waiter'},
@@ -1115,31 +1129,28 @@ function renderLogin(){
   ];
   var loginUsers=[];
   try{ loginUsers=(DB.users||[]).filter(function(u){ return u && u.name && !u.hidden && u.role!=='Developer'; }); }catch(e){ loginUsers=[]; }
-  if(loginUsers.length<2){
-    // use fallback, and repair DB
-    loginUsers=FALLBACK_USERS.slice();
+  if(loginUsers.length < 2){
+    loginUsers = FALLBACK.slice();
     try{
-      DB.users = FALLBACK_USERS.concat([{name:'Developer',pin:'8746',role:'Developer',hidden:true}]);
+      DB.users = FALLBACK.concat([{name:'Developer',pin:'8746',role:'Developer',hidden:true}]);
       if(typeof persist==='function') persist();
+      if(typeof schedulePush==='function') schedulePush();
     }catch(e){}
   }
   loginUsers.forEach(function(u,i){
     var b=document.createElement('button');
     b.textContent=u.name;
-    b.style.cssText='background:#fbeceb;color:#7e0c1a;font-weight:600;border:1px solid #f0d5d5;border-radius:10px;padding:10px 14px;cursor:pointer;min-width:84px';
+    b.style.cssText='background:#fbeceb;color:#7e0c1a;font-weight:600;border:1px solid #f0d5d5;border-radius:10px;padding:10px 14px;cursor:pointer;min-width:84px;margin:3px';
     b.onmouseenter=function(){ if(!b.classList.contains('sel')) b.style.background='#f7d9d7'; };
     b.onmouseleave=function(){ if(!b.classList.contains('sel')) b.style.background='#fbeceb'; };
     b.onclick=function(){
       document.querySelectorAll('#userSelect button').forEach(function(x){ x.classList.remove('sel'); x.style.background='#fbeceb'; x.style.color='#7e0c1a'; });
       b.classList.add('sel'); b.style.background='#b91327'; b.style.color='#fff';
-      CUR=JSON.parse(JSON.stringify(u));
+      try{ CUR=JSON.parse(JSON.stringify(u)); }catch(e){ CUR=u; }
       PIN=''; drawPin();
       var er=document.getElementById('loginErr'); if(er) er.textContent='';
     };
-    if(i===0){
-      b.classList.add('sel'); b.style.background='#b91327'; b.style.color='#fff';
-      CUR=JSON.parse(JSON.stringify(u));
-    }
+    if(i===0){ b.classList.add('sel'); b.style.background='#b91327'; b.style.color='#fff'; try{ CUR=JSON.parse(JSON.stringify(u)); }catch(e){ CUR=u; } }
     us.appendChild(b);
   });
   var kp=document.getElementById('keypad');
@@ -1149,8 +1160,6 @@ function renderLogin(){
       var b=document.createElement('button');
       b.textContent=k;
       b.style.cssText='padding:16px;font-size:20px;background:#fbeceb;color:#7e0c1a;font-weight:700;border-radius:14px;border:none;cursor:pointer';
-      b.onmousedown=function(){ b.style.background='#f7d9d7'; };
-      b.onmouseup=function(){ b.style.background='#fbeceb'; };
       b.onclick=function(){ keypad(k); };
       kp.appendChild(b);
     });
@@ -3593,9 +3602,8 @@ function applyRemote(j){
   const keepLocalMenu=(localMenuVer>remoteMenuVer);
   const savedMenu=DB.menu, savedMenuVer=DB.menuVersion;
   var _savedUsers = (DB.users||[]).slice();
-  SYNC_KEYS.forEach(k=>{ if(j[k]!==undefined){ if(k==='users'){ if(!j[k]||!j[k].length){ /* ignore empty remote users */ return; } if(j[k].length < 3){ /* remote users suspiciously small */ return; } } if(k==='menu' && (!j[k]||!j[k].length)) return; DB[k]=j[k]; } });
-  // user-guard: if remote killed users, restore
-  if(!DB.users || DB.users.length < 3){ DB.users = _savedUsers && _savedUsers.length ? _savedUsers : (typeof seed==='function'?seed().users.slice():[]); }
+  SYNC_KEYS.forEach(k=>{ if(j[k]!==undefined){ if(k==='users' && (!j[k]||j[k].length<3)) return; if(k==='menu' && (!j[k]||!j[k].length)) return; DB[k]=j[k]; } });
+  if(!DB.users || DB.users.length < 3){ DB.users = _savedUsers.length ? _savedUsers : (typeof seed==='function'?seed().users.slice():[]); }
   if(typeof j.menuVersion!=='undefined') DB.menuVersion=j.menuVersion;
   if(keepLocalMenu){ DB.menu=savedMenu; DB.menuVersion=savedMenuVer; window.__menuUpgraded=true; }
   if(DB.settings){
@@ -3726,7 +3734,7 @@ async function syncNow(){
     await pushNow();
     const ch=await pullNow({force:true});
     _syncing=false; setSyncBadge('ok');
-    toast(ch?'✅ Synced — updated from server':'✅ Synced — up to date');
+    toast(ch?'✅ Synced — updated from cloud':'✅ Live — up to date');
   }catch(e){ _syncing=false; setSyncBadge('off'); toast('⚠️ Sync failed — check connection'); }
   if(btn){btn.disabled=false; btn.textContent=btn._t||'🔄 Sync Now';}
   updateSyncStatusUI();
@@ -3891,28 +3899,42 @@ function wire(){
 
 /* ---------- START ---------- */
 
-/* v11 addons - safe, no boot replace */
-(function(){ if(window.__iw11) return; window.__iw11=1;
-function onReady(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
-onReady(function(){ try{ renderLogin(); }catch(e){ console.error(e); } });
-window.addEventListener('online', function(){ var nb=document.getElementById('netBanner'); if(nb) nb.style.display='none'; });
-window.addEventListener('offline', function(){ var nb=document.getElementById('netBanner'); if(nb) nb.style.display='block'; });
+/* === v12.2 multi-device sync doctor === */
+(function(){
+if(window.__iw122) return; window.__iw122=1;
+// online/offline banner
+window.addEventListener('online', function(){ var nb=document.getElementById('netBanner'); if(nb) nb.style.display='none'; try{ toast('🌐 Online – resyncing'); }catch(e){} setTimeout(function(){ try{ syncNow(); }catch(e){} }, 500); });
+window.addEventListener('offline', function(){ var nb=document.getElementById('netBanner'); if(nb) nb.style.display='block'; try{ toast('📴 Offline – queued'); setSyncBadge('warn'); }catch(e){} });
+// payload
 window.estimatePayloadKB=function(){ try{ return Math.round(JSON.stringify(typeof snapshot==='function'?snapshot():DB).length/1024);}catch(e){return 0;} };
-window.runStressTest=async function(n){ n=n||50; if(!(typeof CUR!=='undefined' && CUR && CUR.role==='Developer')){ alert('Login Developer PIN 8746 first'); return 0;} var ok=0,fail=0,t0=performance.now(); for(var i=0;i<n;i++){ try{ var k='TA_STRESS'; if(!DB.carts) DB.carts={}; if(!DB.carts[k]) DB.carts[k]={key:k,items:[],mtime:Date.now()}; DB.carts[k].mtime=Date.now(); DB.carts[k].items=[{id:'s'+i,name:'Stress',qty:1,price:1}]; if(typeof persist==='function') persist(); if(typeof schedulePush==='function') schedulePush(); ok++; if(i%12===0) await new Promise(function(r){setTimeout(r,18)});}catch(e){fail++;} } try{ delete DB.carts['TA_STRESS']; persist(); schedulePush(); }catch(e){} alert('✅ Stress '+ok+'/'+n+' ok, '+fail+' fail\n'+Math.round(performance.now()-t0)+'ms · '+estimatePayloadKB()+'KB'); return ok; };
-window.iwSyncDiag=function(){ try{ return {online: typeof _syncOnline!=='undefined'?_syncOnline:false, rev: typeof _rev!=='undefined'?_rev:0, kb: estimatePayloadKB(), users:(DB.users||[]).length }; }catch(e){return {err:e.message}} };
-setInterval(function(){ try{ var el=document.getElementById('syncHealth'); if(el){ var d=window.iwSyncDiag?iwSyncDiag():{}; el.textContent='rev '+(d.rev||0)+' · '+(d.kb||0)+'KB · '+(d.online?'🟢 LIVE':'🔴 OFF')+' · users:'+(d.users||0); var cd=document.getElementById('devStressCard'); if(cd && typeof CUR!=='undefined' && CUR && CUR.role==='Developer') cd.style.display='block'; } }catch(e){} }, 1200);
-// login watchdog - every 800ms if login visible but userSelect empty, re-render
-setInterval(function(){ try{ var lg=document.getElementById('login'); var us=document.getElementById('userSelect'); if(lg && lg.style.display!=='none' && us && us.children.length===0){ console.warn('IW watchdog re-render login'); renderLogin(); } }catch(e){} }, 800);
+// stress test
+window.runStressTest=async function(n){ n=n||50; if(!(typeof CUR!=='undefined' && CUR && CUR.role==='Developer')){ alert('Login Developer first\nPIN: 8746'); return 0;} var ok=0,fail=0,t0=performance.now(); for(var i=0;i<n;i++){ try{ var k='TA_STRESS'; if(!DB.carts) DB.carts={}; if(!DB.carts[k]) DB.carts[k]={key:k,items:[],mtime:Date.now()}; DB.carts[k].mtime=Date.now(); DB.carts[k].items=[{id:'s'+i,name:'Stress '+i,qty:1,price:1}]; if(typeof persist==='function') persist(); if(typeof schedulePush==='function') schedulePush(); ok++; if(i%10===0) await new Promise(function(r){setTimeout(r,25)});}catch(e){fail++;} } try{ delete DB.carts['TA_STRESS']; persist(); schedulePush(); }catch(e){} var ms=Math.round(performance.now()-t0); var msg='✅ Stress '+ok+'/'+n+' ok, '+fail+' fail\n'+ms+'ms · '+estimatePayloadKB()+'KB · rev '+(typeof _rev!=='undefined'?_rev:'?'); try{toast(msg)}catch(e){} alert(msg+'\n'+JSON.stringify(window.iwSyncDiag?iwSyncDiag():{},null,2)); return ok; };
+// sync diag
+window.iwSyncDiag=function(){ try{ return { online: typeof _syncOnline!=='undefined'?_syncOnline:false, lastSync: typeof _lastSync!=='undefined'?_lastSync:0, ago: typeof timeAgo==='function'? timeAgo(_lastSync):'', rev: typeof _rev!=='undefined'?_rev:0, kb: estimatePayloadKB(), users: (DB.users||[]).length, carts: Object.keys(DB.carts||{}).length, doc: typeof getDocPath==='function'? getDocPath():'', device: typeof DEVICE_ID!=='undefined'? DEVICE_ID : '', fb: typeof firebaseEnabled==='function'? firebaseEnabled():false, pushing: typeof _pushing!=='undefined'?_pushing:false, pulling: typeof _pulling!=='undefined'?_pulling:false, listenerErr: typeof _syncListenerErrors!=='undefined'?_syncListenerErrors:0 }; }catch(e){ return {err:e.message} } };
+// ping other devices
+window.testPing=async function(){ try{ if(!firebaseEnabled()){ alert('Firebase not enabled – check Settings → Firebase config'); return; } var msg='ping-'+Date.now()+'-'+Math.random().toString(36).slice(2,6); if(!DB._pings) DB._pings=[]; DB._pings.push({t:Date.now(),from: (typeof DEVICE_ID!=='undefined'?DEVICE_ID:'web'), msg:msg}); if(DB._pings.length>5) DB._pings = DB._pings.slice(-5); persist(); schedulePush(); toast('📡 Ping sent: '+msg); setTimeout(function(){ alert('Ping sent.\nOpen the POS on your MOBILE / laptop – you should see a toast “ping” within 2 sec.\n\n'+JSON.stringify(iwSyncDiag(),null,2)); }, 800); }catch(e){ alert(e.message); } };
+// repair sync
+window.repairSync=function(){ try{ if(confirm('Repair multi-device sync?\n\nThis will:\n• Force-pull latest from Firebase\n• Re-push local users if missing\n• Restart Firestore listener\n• Clear corrupt session')){ localStorage.removeItem('iw_session'); if(typeof DB!=='undefined' && (!DB.users || DB.users.length<3) && typeof seed==='function'){ DB.users = seed().users.slice(); save(); } if(typeof startSync==='function') startSync(); if(typeof syncNow==='function') syncNow(); toast('🛠️ Repair running…'); setTimeout(function(){ location.reload(); }, 1200); } }catch(e){ alert(e.message); } };
+// live updater
+setInterval(function(){ try{
+  var el=document.getElementById('syncHealth'); if(el && window.iwSyncDiag){ var s=iwSyncDiag(); el.textContent='rev '+(s.rev||0)+' · '+(s.kb||0)+'KB · '+(s.ago||'')+' · '+(s.online?'🟢 LIVE':'🔴 OFF')+' · users:'+(s.users||0)+' carts:'+(s.carts||0); var cd=document.getElementById('devStressCard'); if(cd && typeof CUR!=='undefined' && CUR && CUR.role==='Developer') cd.style.display='block'; }
+  var docEl=document.getElementById('syncDoctor'); if(docEl && window.iwSyncDiag){ var d=iwSyncDiag(); var issues=[]; if(!d.fb) issues.push('❌ Firebase OFF – Settings → enter apiKey + projectId → Save'); else if(!d.online) issues.push('⚠️ Listener OFF – check WiFi / Firestore rules – tap 🔄 Force Resync'); if((d.users||0)<3) issues.push('⚠️ Users missing – click 🔧 Fix Login'); if((d.kb||0)>800) issues.push('⚠️ Payload '+(d.kb)+'KB high – Sales → Archive Old Bills'); if(d.listenerErr>0) issues.push('⚠️ Listener errors: '+d.listenerErr+' – restarting…'); if(!issues.length) issues.push('✅ Sync healthy – Firebase live · rev '+d.rev+' · '+d.ago); docEl.innerHTML = issues.join('<br>') + '<br><small style="color:#888">doc: '+(d.doc||'')+' · device: '+(d.device||'')+' · pushing:'+(d.pushing?'yes':'no')+'</small>'; }
+  var devList=document.getElementById('deviceList'); if(devList){ try{ var pings=(DB._pings||[]).slice(-3).reverse(); if(pings.length){ devList.innerHTML = '📡 Recent pings:<br>' + pings.map(function(p){ return '· '+(p.from||'?')+' @ '+ new Date(p.t).toLocaleTimeString()+' — '+p.msg; }).join('<br>'); } }catch(e){} }
+} catch(e){} }, 1200);
+// login watchdog
+setInterval(function(){ try{ var lg=document.getElementById('login'); var us=document.getElementById('userSelect'); if(lg && lg.style.display!=='none' && us && us.children.length===0){ renderLogin(); } }catch(e){} }, 800);
+// force initial render – ensures pad shows even if boot is slow (mobile Chrome)
+if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ try{ renderLogin(); }catch(e){} }, 60); setTimeout(function(){ try{ renderLogin(); }catch(e){} }, 700); }); } else { setTimeout(function(){ try{ renderLogin(); }catch(e){} }, 60); }
 })();
-/* end v11 */
+/* === end v12.2 === */
 
 async function boot(){
-  console.log("IW v11 boot");
-  // show login IMMEDIATELY
-  try{ renderLogin(); }catch(e){}
-  // then sync in background, non-blocking
+  console.log("IW v12.2 boot");
+  // show login instantly – never block UI on Firebase
+  try{ renderLogin(); }catch(e){ console.error(e); }
+  // background sync non-blocking
   try{ if(typeof firebaseEnabled==="function" && firebaseEnabled()){ firebasePull({force:true}).then(function(){ try{ renderLogin(); }catch(e){} }).catch(function(){}); } }catch(e){}
-  // if(firebaseEnabled()){ await firebasePull({force:true}); } // disabled blocking pull  // get latest shared data before anything
+  // if(firebaseEnabled()){ await firebasePull({force:true}); } // disabled blocking  // get latest shared data before anything
   // If this app version upgraded the built-in menu (and the sheet still has the
   // old one), push the new menu UP so every device gets it.
   if(window.__menuUpgraded && firebaseEnabled()){ window.__menuUpgraded=false; persist(); await pushNow(); toast('🍽️ Menu updated to the latest'); }
@@ -3927,5 +3949,5 @@ async function boot(){
 }
 boot();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1184ca09d851211',t:'MTc4MjQzNTg4MQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a1186a6ebee9447e',t:'MTc4MjQzNzEwMQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
